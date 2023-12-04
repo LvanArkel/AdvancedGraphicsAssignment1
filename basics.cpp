@@ -13,10 +13,10 @@
 TheApp* CreateApp() { return new BasicBVHApp(); }
 
 // triangle count
-#define N	64
+#define N	4
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
-#define GRID_SIZE  20
+#define GRID_SIZE  2
 
 #define GRID_ACC 1
 
@@ -184,6 +184,7 @@ void CheckGridCell(int x, int y, int z, Ray& ray) {
 	vector<int> triangles = gc.triangles;
 	for (int i = 0; i < triangles.size(); i++) {
 		IntersectTri(ray, tri[triangles[i]]);
+		if (ray.t < 1e30f) return;
 	}
 //}
 //catch (...) { std::cout << x << ", " << y << ", " << z << std::endl; }
@@ -281,11 +282,16 @@ void BuildGrid() {
 		float zmin = min({ tri[i].vertex0.z, tri[i].vertex1.z, tri[i].vertex2.z });
 		float zmax = max({ tri[i].vertex0.z, tri[i].vertex1.z, tri[i].vertex2.z });
 
-		for (int x = floor(xmin - grid.min.x); x <= floor(xmax - grid.min.x); x++) {
-			for (int y = floor(ymin - grid.min.y); y <= floor(ymax - grid.min.y); y++) {
-				for (int z = floor(zmin - grid.min.z); z <= floor(zmax - grid.min.z); z++) {
-					grid.grid[x][y][z].triangles.push_back(i);
-					std::cout << i << std::endl;
+		std::cout << grid.cellSize.x << ", " << grid.cellSize.y << ", " << grid.cellSize.z << std::endl;
+
+
+		for (float x = xmin - grid.min.x; x <= xmax - grid.min.x; x+=grid.cellSize.x) {
+			for (float y = ymin - grid.min.y; y <= ymax - grid.min.y; y+=grid.cellSize.y) {
+				for (float z = zmin - grid.min.z; z <= zmax - grid.min.z; z+=grid.cellSize.z) {
+					int xi = floor(x / grid.cellSize.x);
+					int yi = floor(y / grid.cellSize.y);
+					int zi = floor(z / grid.cellSize.z);
+					grid.grid[xi][yi][zi].triangles.push_back(i);
 				}
 			}
 		}
@@ -325,9 +331,14 @@ void BasicBVHApp::Init()
 		//std::cout << tri[i].vertex0.x << ", " << tri[i].vertex0.y << ", " << tri[i].vertex0.z << std::endl;
 		CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
 	}
+	//std::cout << grid.min.x << ", " << grid.min.y << ", " << grid.min.z << std::endl;
+	//std::cout << grid.max.x << ", " << grid.max.y << ", " << grid.max.z << std::endl;
+#if GRID_ACC:
 	BuildGrid();
+#else
 	// construct the BVH
 	BuildBVH();
+#endif
 }
 
 void TickBVH(Tmpl8::Surface* screen) {
@@ -365,7 +376,7 @@ void TickGrid(Tmpl8::Surface* screen) {
 	Ray ray;
 	Timer t;
 	std::cout << "start" << std::endl;
-	for (int y = 0; y < SCRHEIGHT; y += 16) for (int x = 0; x < SCRWIDTH; x += 16)
+	for (int y = 0; y < SCRHEIGHT; y += 1) for (int x = 0; x < SCRWIDTH; x += 1)
 	{
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
@@ -375,6 +386,8 @@ void TickGrid(Tmpl8::Surface* screen) {
 		// initially the ray has an 'infinite length'
 		ray.t = 1e30f;
 
+
+		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
 		//IntersectGrid(ray);
 		for (int x = 0; x < GRID_SIZE; x++) {
 			//std::cout << x << std::endl;
