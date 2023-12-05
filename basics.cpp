@@ -13,7 +13,7 @@
 TheApp* CreateApp() { return new BasicBVHApp(); }
 
 // triangle count
-#define N	16
+#define N	8
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
 #define GRID_SIZE  4
@@ -56,6 +56,13 @@ Tri tri[N];
 uint triIdx[N];
 BVHNode bvhNode[N * 2];
 uint rootNodeIdx = 0, nodesUsed = 1;
+
+struct gc {
+public:
+	uint data[GRID_SIZE][GRID_SIZE][GRID_SIZE];
+};
+gc gridCheck;
+
 
 // functions
 
@@ -184,16 +191,25 @@ void CheckGridCell(int x, int y, int z, Ray& ray) {
 	for (int i = 0; i < triangles.size(); i++) {
 		IntersectTri(ray, tri[triangles[i]]);
 		if (ray.t < 1e30f) {
+			gridCheck.data[x][y][z] = 2;
 			//std::cout << "SLOEP" << std::endl;
-			return; 
+			//return; 
 		}
 	}
 }
 
-void IntersectGird(Ray& ray) {
+void GetStepSizes(Ray& ray) {
+	float sx, sy, sz = 0; //scaling values
+
+
+}
+
+void IntersectGrid(Ray& ray) {
+	//First find intersection point with grid (if none, return)
 	float tMin = (grid.min.x - ray.O.x) / ray.D.x;
 	float tMax = (grid.max.x - ray.O.x) / ray.D.x;
 
+	//min represents entrance in box, max exit, so swap them if max is larger than min
 	if (tMin > tMax) std::swap(tMin, tMax);
 
 	float txMin = tMin;
@@ -203,8 +219,9 @@ void IntersectGird(Ray& ray) {
 
 	if (tyMin > tyMax) std::swap(tyMin, tyMax);
 
+	//check intersection with the xy planes
 	if ((tMin > tyMax) || (tyMin > tMax)) {
-		return; // No intersection with the XY faces
+		return;
 	}
 
 	if (tyMin > tMin) tMin = tyMin;
@@ -215,30 +232,60 @@ void IntersectGird(Ray& ray) {
 
 	if (tzMin > tzMax) std::swap(tzMin, tzMax);
 
+	//No intersection with the box
 	if ((tMin > tzMax) || (tzMin > tMax)) {
-		return; // No intersection with the box
+		return;
 	}
 
 	if (tzMin > tMin) tMin = tzMin;
-	// if (tzMax < tMax) tMax = tzMax; // Uncomment if you want to use tMax for something
+	// if (tzMax < tMax) tMax = tzMax;
 
+	float stepX = ray.D.x < 0 ? -1 : 1;
+	float stepY = ray.D.y < 0 ? -1 : 1;
+	float stepZ = ray.D.z < 0 ? -1 : 1;
+
+	
+	//std::cout << (grid.cellSize.x * 0.5f) << std::endl;
+	//Closest point is the intersection point
 	float3 intersectionPoint = float3(0);
-	intersectionPoint.x = ray.O.x + tMin * ray.D.x;
-	intersectionPoint.y = ray.O.y + tMin * ray.D.y;
-	intersectionPoint.z = ray.O.z + tMin * ray.D.z;
+	//float xoffset = 0.5f;
+	intersectionPoint.x = (ray.O.x + tMin * ray.D.x);
+	//std::cout << intersectionPoint.x << std::endl;
+	intersectionPoint.y = (ray.O.y + tMin * ray.D.y);
+	intersectionPoint.z = (ray.O.z + tMin * ray.D.z);
+	//intersectionPoint.x = ray.D.x < 0 ? intersectionPoint.x - (grid.cellSize.x * 0.5f) : intersectionPoint.x + (grid.cellSize.x * 0.5f);
+	//intersectionPoint.y = ray.D.y < 0 ? intersectionPoint.y - (grid.cellSize.x * 0.5f) : intersectionPoint.y + (grid.cellSize.x * 0.5f);
+	//intersectionPoint.z = ray.D.z < 0 ? intersectionPoint.z - (grid.cellSize.x * 0.5f) : intersectionPoint.z + (grid.cellSize.x * 0.5f);
 
 	int cellIndex[] = { 0, 0, 0 };
 	cellIndex[0] = floor((intersectionPoint.x - grid.min.x) / grid.cellSize.x);
 	cellIndex[1] = floor((intersectionPoint.y - grid.min.y) / grid.cellSize.y);
 	cellIndex[2] = floor((intersectionPoint.z - grid.min.z) / grid.cellSize.z);
+	//std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
+	//gridCheck.data[cellIndex[0]][cellIndex[1]][cellIndex[2]] = 2;
 
 	CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
 
+	float sx, sy, sz = 0;
+	sx = sqrt(grid.cellSize.x + ((ray.D.y / ray.D.x) * (ray.D.y / ray.D.x)) + ((ray.D.z / ray.D.x) * (ray.D.z / ray.D.x)));
+	sy = sqrt(grid.cellSize.y + ((ray.D.x / ray.D.y) * (ray.D.x / ray.D.y)) + ((ray.D.z / ray.D.y) * (ray.D.z / ray.D.y)));
+	sz = sqrt(grid.cellSize.z + ((ray.D.x / ray.D.z) * (ray.D.x / ray.D.z)) + ((ray.D.y / ray.D.z) * (ray.D.y / ray.D.z)));
+
+
 	float3 deltaT = float3(0);
+	deltaT.x = sx;
+	deltaT.y = sy;
+	deltaT.z = sz;
+	//deltaT.x = grid.cellSize.x / abs(ray.D.x);
+	//deltaT.y = grid.cellSize.y / abs(ray.D.y);
+	//deltaT.z = grid.cellSize.z / abs(ray.D.z);
+
+	//std::cout << deltaT.x << ", " << deltaT.y << ", " << deltaT.z << std::endl;
 	//QUESTION isn't dividing by the ray direction unsafe? since it might be 0
-	deltaT.x = ray.D.x < 0 ? -grid.size.x / ray.D.x : grid.size.x / ray.D.x;
-	deltaT.y = ray.D.y < 0 ? -grid.size.y / ray.D.y : grid.size.y / ray.D.y;
-	deltaT.z = ray.D.z < 0 ? -grid.size.z / ray.D.z : grid.size.z / ray.D.z;
+	//deltaT.x = ray.D.x < 0 ? -grid.size.x / ray.D.x : grid.size.x / ray.D.x;
+	//deltaT.y = ray.D.y < 0 ? -grid.size.y / ray.D.y : grid.size.y / ray.D.y;
+	//deltaT.z = ray.D.z < 0 ? -grid.size.z / ray.D.z : grid.size.z / ray.D.z;
+
 	float tx = deltaT.x;
 	float ty = deltaT.y;
 	float tz = deltaT.z;
@@ -256,157 +303,47 @@ void IntersectGird(Ray& ray) {
 		counter++;
 		if (tx < ty && tx < tz) {
 			//std::cout << "x" << std::endl;
+			//std::cout << ray.D.x << std::endl;
 			t = tx;
 			tx += deltaT.x;
 			cellIndex[0] = ray.D.x < 0 ? cellIndex[0] - 1 : cellIndex[0] + 1;
-			if (cellIndex[0] >= 0 && cellIndex[0] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			if (cellIndex[0] >= 0 && cellIndex[0] < GRID_SIZE) {
+				//gridCheck.data[cellIndex[0]][cellIndex[1]][cellIndex[2]] = 2;
+				CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			}
 			else break;
 		}
-		else if (ty < tx && ty < tz) {
+		else if (ty < tz && ty < tx) {
 			//std::cout << "y" << std::endl;
 			t = ty;
 			ty += deltaT.y;
 			cellIndex[1] = ray.D.y < 0 ? cellIndex[1] - 1 : cellIndex[1] + 1;
-			if (cellIndex[1] >= 0 && cellIndex[1] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			if (cellIndex[1] >= 0 && cellIndex[1] < GRID_SIZE) {
+				//gridCheck.data[cellIndex[0]][cellIndex[1]][cellIndex[2]] = 2;
+				CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			}
 			else break;
 		}
 		else {
 			//std::cout << "z" << std::endl;
+
 			t = tz;
 			tz += deltaT.z;
 			cellIndex[2] = ray.D.z < 0 ? cellIndex[2] - 1 : cellIndex[2] + 1;
-			if (cellIndex[2] > -1 && cellIndex[2] < GRID_SIZE)CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
-			else break;
-		}
-		if (counter == 100) break;
-	}
-	
-}
-
-void IntersectGrid(Ray& ray) {
-	float tx, ty, tz;
-	int cellIndex[] = { 0, 0, 0 };
-	float3 mint = float3((grid.min.x - ray.O.x) / ray.D.x,
-		(grid.min.y - ray.O.y) / ray.D.y,
-		(grid.min.z - ray.O.z) / ray.D.z);
-	float3 maxt = float3((grid.max.x - ray.O.x) / ray.D.x,
-		(grid.max.y - ray.O.y) / ray.D.y,
-		(grid.max.z - ray.O.z) / ray.D.z);
-	float tmin = max(max(mint.x, mint.y), mint.z);
-	float tmax = min(min(maxt.x, maxt.y), maxt.z);
-	//std::cout << tmin << std::endl;
-	//std::cout << tmax << std::endl;
-
-	if (tmin > tmax) {
-		//std::cout << "SLOEP" << std::endl;
-		return; //no intersection
-	}
-	float3 intrspoint = ray.O + (tmin * ray.D);
-	cellIndex[0] = floor((intrspoint.x - grid.min.x) / grid.cellSize.x);
-	cellIndex[1] = floor((intrspoint.y - grid.min.y) / grid.cellSize.y);
-	cellIndex[2] = floor((intrspoint.z - grid.min.z) / grid.cellSize.z);
-	ray.t = 0.0f;
-
-
-	
-	std::cout << "A" << std::endl;
-	if (cellIndex[0] >= 0 && cellIndex[0] <= GRID_SIZE - 1) {
-		if (cellIndex[1] >= 0 && cellIndex[1] <= GRID_SIZE - 1) {
-			if (cellIndex[2] >= 0 && cellIndex[2] <= GRID_SIZE - 1) {
+			//if (cellIndex[2] > 0) {
+			//	std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
+			//}
+			if (cellIndex[2] >= 0 && cellIndex[2] < GRID_SIZE) {
+				//gridCheck.data[cellIndex[0]][cellIndex[1]][cellIndex[2]] = 2;
 				CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
 			}
+			else break;
 		}
-	}
-
-	float3 deltaT = float3(0);
-	//QUESTION isn't dividing by the ray direction unsafe? since it might be 0
-	deltaT.x = ray.D.x < 0 ? -grid.size.x * (1.0 / ray.D.x) : grid.size.x * (1.0 / ray.D.x);
-	deltaT.y = ray.D.y < 0 ? -grid.size.y * (1.0 / ray.D.y) : grid.size.y * (1.0 / ray.D.y);
-	deltaT.z = ray.D.z < 0 ? -grid.size.z * (1.0 / ray.D.z) : grid.size.z * (1.0 / ray.D.z);
-
-	tx = deltaT.x, ty = deltaT.y, tz = deltaT.z;
-
-	
-
-	/*std::cout << ray.D.x << std::endl;
-	std::cout << ray.D.y << std::endl;
-	std::cout << ray.D.z << std::endl;*/
-
-
-	//float3 rayOriginGrid = ray.O - grid.min;
-	//float3 oCell = rayOriginGrid / grid.cellSize;
-	//std::cout << oCell.x << ", " << oCell.y << ", " << oCell.z << std::endl;
-	//tx = (grid.cellSize.x - ray.O.x) / ray.D.x;
-	//ty = (grid.cellSize.y - ray.O.y) / ray.D.y;
-	//tz = (grid.cellSize.z - ray.O.z) / ray.D.z;
-	/*if (ray.D.x < 0) {
-		deltaT.x = -grid.cellSize.x / ray.D.x;
-		tx = floor(oCell.x) * grid.cellSize.x - ray.O.x / ray.D.x;
-	}
-	else {
-		deltaT.x = -grid.cellSize.x / ray.D.x;
-		tx = (floor(oCell.x) + 1.0f) * grid.cellSize.x - ray.O.x / ray.D.x;
-	}
-	if (ray.D.y < 0) {
-		deltaT.y = -grid.cellSize.y / ray.D.y;
-		ty = floor(oCell.y) * grid.cellSize.y - ray.O.y / ray.D.y;
-	}
-	else {
-		deltaT.y = -grid.cellSize.y / ray.D.y;
-		ty = (floor(oCell.y) + 1.0f) * grid.cellSize.y - ray.O.y / ray.D.y;
-	}
-	if (ray.D.z < 0) {
-		deltaT.z = -grid.cellSize.z / ray.D.z;
-		tz = floor(oCell.z) * grid.cellSize.z - ray.O.z / ray.D.z;
-	}
-	else {
-		deltaT.z = -grid.cellSize.z / ray.D.z;
-		tz = (floor(oCell.z) + 1.0f) * grid.cellSize.z - ray.O.z / ray.D.z;
-	}*/
-
-	//deltaT = { grid.cellSize.x / abs(ray.D.x), grid.cellSize.y / abs(ray.D.y), grid.cellSize.z / abs(ray.D.z) };
-	//float tx = (((floor(oCell.x) + 1.0f) * grid.cellSize.x) - ray.O.x) / ray.D.x;
-	//float ty = (((floor(oCell.y) + 1.0f) * grid.cellSize.y) - ray.O.y) / ray.D.y;
-	//float tz = (((floor(oCell.z) + 1.0f) * grid.cellSize.z) - ray.O.z) / ray.D.z;
-	//float t = 0;
-	//int cellIndex[] = { floor(tx / grid.size.x), floor(ty / grid.size.y), floor(tz / grid.size.z) };
-	//std::cout << tx << ", " << ty << ", " << tz << std::endl;
-	//std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
-
-	//int counter = 0;
-	//float t = 0;
-	//std::cout << "AAA" << std::endl;
-	//while (1) {
-		//std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
-		//counter++;
-		//if (tx < ty && tx < tz) {
-		//	//std::cout << "x" << std::endl;
-		//	t = tx;
-		//	tx += deltaT.x;
-		//	cellIndex[0] = ray.D.x < 0 ? cellIndex[0] - 1 : cellIndex[0] + 1;
-		//	if (cellIndex[0] >= 0 && cellIndex[0] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
-		//	else break;
-		//}
-		//else if (ty < tx && ty < tz) {
-		//	//std::cout << "y" << std::endl;
-		//	t = ty;
-		//	ty += deltaT.y;
-		//	cellIndex[1] = ray.D.y < 0 ? cellIndex[1] - 1 : cellIndex[1] + 1;
-		//	if (cellIndex[1] >= 0 && cellIndex[1] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
-		//	else break;
-		//}
-		//else {
-			//std::cout << "z" << std::endl;	
-			//t = tz;
-			//tz += deltaT.z;
-			//cellIndex[2] = ray.D.z < 0 ? cellIndex[2] - 1 : cellIndex[2] + 1;
-			//if (cellIndex[2] > -1 && cellIndex[2] < GRID_SIZE)CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
-			//else break;
-		//}
 		//if (counter == 100) break;
-	//}
-	//std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
+	}
+
 }
+
 
 
 
@@ -536,18 +473,30 @@ void TickGrid(Tmpl8::Surface* screen) {
 	std::cout << "start" << std::endl;
 	//int ct = 0;
 	int count = 0;
-	for (int y = 0; y < SCRHEIGHT; y += 1) for (int x = 0; x < SCRWIDTH; x += 1)
+
+	//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
+	for (int x = 0; x < GRID_SIZE; x++) {
+		//std::cout << x << std::endl;
+		for (int y = 0; y < GRID_SIZE; y++) {
+			for (int z = 0; z < GRID_SIZE; z++) {
+				gridCheck.data[x][y][z] = 1;
+			}
+		}
+	}
+	for (int y = 0; y < SCRHEIGHT; y += 4) for (int x = 0; x < SCRWIDTH; x += 4)
 	{
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
-		ray.O = float3(0, 0, -16);
+		ray.O = float3(0, 0, -17);
 		ray.D = normalize(pixelPos - ray.O);
 		// initially the ray has an 'infinite length'
 		ray.t = 1e30f;
 
 		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
-		IntersectGird(ray);
+
+		IntersectGrid(ray);
+
 		//for (int x = 0; x < GRID_SIZE; x++) {
 		//	//std::cout << x << std::endl;
 		//	for (int y = 0; y < GRID_SIZE; y++) {
@@ -563,10 +512,20 @@ void TickGrid(Tmpl8::Surface* screen) {
 
 		if (ray.t < 1e30f) screen->Plot(x, y, 0xffffff);
 	}
+	for (int x = 0; x < GRID_SIZE; x++) {
+		//std::cout << x << std::endl;
+		for (int y = 0; y < GRID_SIZE; y++) {
+			for (int z = 0; z < GRID_SIZE; z++) {
+				std::cout << "check" << "-" << gridCheck.data[x][y][z];
+				std::cout << "num-" << grid.grid[x][y][z].triangles.size();
+			}
+			std::cout << std::endl;
+			}
+		}
 	std::cout << count << std::endl;
 	float elapsed = t.elapsed() * 1000;
 	printf("tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr(630) / elapsed);
-}
+	}
 
 void BasicBVHApp::Tick(float deltaTime)
 {
