@@ -16,7 +16,7 @@ TheApp* CreateApp() { return new BasicBVHApp(); }
 #define N	16
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
-#define GRID_SIZE  2
+#define GRID_SIZE  4
 
 #define GRID_ACC 1
 
@@ -190,6 +190,99 @@ void CheckGridCell(int x, int y, int z, Ray& ray) {
 	}
 }
 
+void IntersectGird(Ray& ray) {
+	float tMin = (grid.min.x - ray.O.x) / ray.D.x;
+	float tMax = (grid.max.x - ray.O.x) / ray.D.x;
+
+	if (tMin > tMax) std::swap(tMin, tMax);
+
+	float txMin = tMin;
+
+	float tyMin = (grid.min.y - ray.O.y) / ray.D.y;
+	float tyMax = (grid.max.y - ray.O.y) / ray.D.y;
+
+	if (tyMin > tyMax) std::swap(tyMin, tyMax);
+
+	if ((tMin > tyMax) || (tyMin > tMax)) {
+		return; // No intersection with the XY faces
+	}
+
+	if (tyMin > tMin) tMin = tyMin;
+	if (tyMax < tMax) tMax = tyMax;
+
+	float tzMin = (grid.min.z - ray.O.z) / ray.D.z;
+	float tzMax = (grid.max.z - ray.O.z) / ray.D.z;
+
+	if (tzMin > tzMax) std::swap(tzMin, tzMax);
+
+	if ((tMin > tzMax) || (tzMin > tMax)) {
+		return; // No intersection with the box
+	}
+
+	if (tzMin > tMin) tMin = tzMin;
+	// if (tzMax < tMax) tMax = tzMax; // Uncomment if you want to use tMax for something
+
+	float3 intersectionPoint = float3(0);
+	intersectionPoint.x = ray.O.x + tMin * ray.D.x;
+	intersectionPoint.y = ray.O.y + tMin * ray.D.y;
+	intersectionPoint.z = ray.O.z + tMin * ray.D.z;
+
+	int cellIndex[] = { 0, 0, 0 };
+	cellIndex[0] = floor((intersectionPoint.x - grid.min.x) / grid.cellSize.x);
+	cellIndex[1] = floor((intersectionPoint.y - grid.min.y) / grid.cellSize.y);
+	cellIndex[2] = floor((intersectionPoint.z - grid.min.z) / grid.cellSize.z);
+
+	CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+
+	float3 deltaT = float3(0);
+	//QUESTION isn't dividing by the ray direction unsafe? since it might be 0
+	deltaT.x = ray.D.x < 0 ? -grid.size.x / ray.D.x : grid.size.x / ray.D.x;
+	deltaT.y = ray.D.y < 0 ? -grid.size.y / ray.D.y : grid.size.y / ray.D.y;
+	deltaT.z = ray.D.z < 0 ? -grid.size.z / ray.D.z : grid.size.z / ray.D.z;
+	float tx = deltaT.x;
+	float ty = deltaT.y;
+	float tz = deltaT.z;
+	//float tx = txMin == tMin ? deltaT.x : 0.0f;
+	//float ty = tyMin == tMin ? deltaT.y : 0.0f;
+	//float tz = tzMin == tMin ? deltaT.z : 0.0f;
+	//ray.t = 0.0f;
+	//return;
+
+	int counter = 0;
+	float t = 0;
+	//std::cout << "AAA" << std::endl;
+	while (1) {
+		//std::cout << cellIndex[0] << ", " << cellIndex[1] << ", " << cellIndex[2] << std::endl;
+		counter++;
+		if (tx < ty && tx < tz) {
+			//std::cout << "x" << std::endl;
+			t = tx;
+			tx += deltaT.x;
+			cellIndex[0] = ray.D.x < 0 ? cellIndex[0] - 1 : cellIndex[0] + 1;
+			if (cellIndex[0] >= 0 && cellIndex[0] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			else break;
+		}
+		else if (ty < tx && ty < tz) {
+			//std::cout << "y" << std::endl;
+			t = ty;
+			ty += deltaT.y;
+			cellIndex[1] = ray.D.y < 0 ? cellIndex[1] - 1 : cellIndex[1] + 1;
+			if (cellIndex[1] >= 0 && cellIndex[1] < GRID_SIZE) CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			else break;
+		}
+		else {
+			//std::cout << "z" << std::endl;
+			t = tz;
+			tz += deltaT.z;
+			cellIndex[2] = ray.D.z < 0 ? cellIndex[2] - 1 : cellIndex[2] + 1;
+			if (cellIndex[2] > -1 && cellIndex[2] < GRID_SIZE)CheckGridCell(cellIndex[0], cellIndex[1], cellIndex[2], ray);
+			else break;
+		}
+		if (counter == 100) break;
+	}
+	
+}
+
 void IntersectGrid(Ray& ray) {
 	float tx, ty, tz;
 	int cellIndex[] = { 0, 0, 0 };
@@ -216,7 +309,7 @@ void IntersectGrid(Ray& ray) {
 
 
 	
-
+	std::cout << "A" << std::endl;
 	if (cellIndex[0] >= 0 && cellIndex[0] <= GRID_SIZE - 1) {
 		if (cellIndex[1] >= 0 && cellIndex[1] <= GRID_SIZE - 1) {
 			if (cellIndex[2] >= 0 && cellIndex[2] <= GRID_SIZE - 1) {
@@ -232,6 +325,8 @@ void IntersectGrid(Ray& ray) {
 	deltaT.z = ray.D.z < 0 ? -grid.size.z * (1.0 / ray.D.z) : grid.size.z * (1.0 / ray.D.z);
 
 	tx = deltaT.x, ty = deltaT.y, tz = deltaT.z;
+
+	
 
 	/*std::cout << ray.D.x << std::endl;
 	std::cout << ray.D.y << std::endl;
@@ -446,13 +541,13 @@ void TickGrid(Tmpl8::Surface* screen) {
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
-		ray.O = float3(0, 0, -18);
+		ray.O = float3(0, 0, -16);
 		ray.D = normalize(pixelPos - ray.O);
 		// initially the ray has an 'infinite length'
 		ray.t = 1e30f;
 
 		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
-		IntersectGrid(ray);
+		IntersectGird(ray);
 		//for (int x = 0; x < GRID_SIZE; x++) {
 		//	//std::cout << x << std::endl;
 		//	for (int y = 0; y < GRID_SIZE; y++) {
