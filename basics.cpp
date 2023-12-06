@@ -1,5 +1,6 @@
 #include "precomp.h"
 #include "basics.h"
+#include "stb_image_write.h"
 
 // THIS SOURCE FILE:
 // Code for the article "How to Build a BVH", part 1: basics. Link:
@@ -64,10 +65,14 @@ public:
 gc gridCheck;
 
 
+//analyzation data
+uint8_t intrs_data[SCRHEIGHT * SCRWIDTH * 3]; //intersection count data for image generation
+int tri_intrs_count = 0; //number of times per ray a triangle intersection check was done
 // functions
 
 void IntersectTri(Ray& ray, const Tri& tri)
 {
+	tri_intrs_count++;
 	const float3 edge1 = tri.vertex1 - tri.vertex0;
 	const float3 edge2 = tri.vertex2 - tri.vertex0;
 	const float3 h = cross(ray.D, edge2);
@@ -437,14 +442,17 @@ void BasicBVHApp::Init()
 }
 
 void TickBVH(Tmpl8::Surface* screen) {
+void BasicBVHApp::Tick(float deltaTime)
+{
 	// draw the scene
 	screen->Clear(0);
 	// define the corners of the screen in worldspace
 	float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
 	Ray ray;
 	Timer t;
-	for (int y = 0; y < SCRHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
-	{
+
+	int ind = 0;
+	for (int y = 0; y < SCRHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++) {
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
@@ -534,6 +542,14 @@ void BasicBVHApp::Tick(float deltaTime)
 #else
 	TickBVH(screen);
 #endif
+
+		intrs_data[ind++] = 0, intrs_data[ind++] = (int)((255.0f / (N)) * tri_intrs_count), intrs_data[ind++] = 0;
+		tri_intrs_count = 0;
+	}
+	float elapsed = t.elapsed() * 1000;
+	printf("tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr(630) / elapsed);
+
+	stbi_write_png("intsection-count.png", SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
 }
 
 // EOF
