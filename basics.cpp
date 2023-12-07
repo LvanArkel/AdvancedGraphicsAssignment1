@@ -16,7 +16,7 @@
 TheApp* CreateApp() { return new BasicBVHApp(); }
 
 // triangle count
-#define N	12	
+#define N	15488	
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
 #define GRID_SIZE  2
@@ -607,38 +607,22 @@ void CheckBounds(float3 v0, float3 v1, float3 v2) {
 
 void BasicBVHApp::Init()
 {
-	fastObjMesh* mesh = fast_obj_read("data/scene1/cube.obj");
+	objl::Loader loader;
+	loader.LoadFile("data/scene1/suzanne.obj");
+	cout << loader.LoadedMeshes[0].MeshName << endl;
+	//vector<unsigned int> indices = loader.LoadedMeshes[0].Indices;
+	vector<objl::Vertex> vertices = loader.LoadedMeshes[0].Vertices;
 
-	int tri_idx = 0;
+	int triidx = 0;
 	for (int i = 0; i < N * 3; i += 3)
 	{
-		//cout << sizeof(mesh->indices[0]) << endl;
-		//return;
-		float3 verts[3];
-		for (int j = 0; j < 3; j++) {
-			int i0 = mesh->indices[i + j].p;
-			int i1 = mesh->indices[i + j].p;
-			int i2 = mesh->indices[i + j].p;
-			cout << i0 << ", " << i1 << ", " << i2 << endl;
-
-			verts[j] = float3(mesh->positions[i0], mesh->positions[i1], mesh->positions[i2]);
-			//cout << verts[j].x << ", " << verts[j].y << ", " << verts[j].z << endl;
-		}
-
-		//tri[tri_idx].vertex0 = float3(verts[0].x, verts[0].y, verts[0].z);
-		//tri[tri_idx].vertex1 = float3(verts[1].x, verts[1].y, verts[1].z);
-		//tri[tri_idx].vertex2 = float3(verts[2].x, verts[2].y, verts[2].z);
-		tri[tri_idx].vertex0 = verts[0];
-		tri[tri_idx].vertex1 = verts[1];
-		tri[tri_idx].vertex2 = verts[2];
+		//cout << vertices[i].Position.X << ", " << vertices[i].Position.Y << ", " << vertices[i].Position.Z << endl;
+		tri[triidx].vertex0 = float3(vertices[i].Position.X, vertices[i].Position.Y, vertices[i].Position.Z);
+		tri[triidx].vertex1 = float3(vertices[i + 1].Position.X, vertices[i + 1].Position.Y, vertices[i + 1].Position.Z);
+		tri[triidx].vertex2 = float3(vertices[i + 2].Position.X, vertices[i + 2].Position.Y, vertices[i + 2].Position.Z);
+		triidx++;
 
 
-		//cout << "c" << tri[tri_idx].vertex0.x << ", " << tri[tri_idx].vertex0.y << ", " << tri[tri_idx].vertex0.z << endl;
-		//cout << tri[tri_idx].vertex1.x << ", " << tri[tri_idx].vertex1.y << ", " << tri[tri_idx].vertex1.z << endl;
-		//cout << tri[tri_idx].vertex2.x << ", " << tri[tri_idx].vertex2.y << ", " << tri[tri_idx].vertex2.z << endl;
-		//CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
-
-		tri_idx++;
 
 
 		//float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
@@ -698,7 +682,7 @@ void TickBVH(Tmpl8::Surface* screen) {
 
 		intrs_data[ind++] = 0, intrs_data[ind++] = (int)((255.0f / (N)) * tri_intrs_count), intrs_data[ind++] = 0;
 		tri_intrs_count = 0;
-	}
+}
 	float elapsed = t.elapsed() * 1000;
 	printf("tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr(630) / elapsed);
 
