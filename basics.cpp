@@ -1,6 +1,8 @@
 #include "precomp.h"
 #include "basics.h"
 #include "stb_image_write.h"
+#include "fast_obj.h"
+#include "OBJ_Loader.h"
 
 // THIS SOURCE FILE:
 // Code for the article "How to Build a BVH", part 1: basics. Link:
@@ -14,12 +16,12 @@
 TheApp* CreateApp() { return new BasicBVHApp(); }
 
 // triangle count
-#define N	128
+#define N	12	
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
-#define GRID_SIZE  64
+#define GRID_SIZE  2
 
-#define GRID_ACC 1
+#define GRID_ACC 0
 
 // forward declarations
 void Subdivide(uint nodeIdx);
@@ -605,14 +607,45 @@ void CheckBounds(float3 v0, float3 v1, float3 v2) {
 
 void BasicBVHApp::Init()
 {
-	// intialize a scene with N random triangles
-	for (int i = 0; i < N; i++)
+	fastObjMesh* mesh = fast_obj_read("data/scene1/cube.obj");
+
+	int tri_idx = 0;
+	for (int i = 0; i < N * 3; i += 3)
 	{
-		float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		float3 r1 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		float3 r2 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		tri[i].vertex0 = r0 * 9 - float3(5);
-		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
+		//cout << sizeof(mesh->indices[0]) << endl;
+		//return;
+		float3 verts[3];
+		for (int j = 0; j < 3; j++) {
+			int i0 = mesh->indices[i + j].p;
+			int i1 = mesh->indices[i + j].p;
+			int i2 = mesh->indices[i + j].p;
+			cout << i0 << ", " << i1 << ", " << i2 << endl;
+
+			verts[j] = float3(mesh->positions[i0], mesh->positions[i1], mesh->positions[i2]);
+			//cout << verts[j].x << ", " << verts[j].y << ", " << verts[j].z << endl;
+		}
+
+		//tri[tri_idx].vertex0 = float3(verts[0].x, verts[0].y, verts[0].z);
+		//tri[tri_idx].vertex1 = float3(verts[1].x, verts[1].y, verts[1].z);
+		//tri[tri_idx].vertex2 = float3(verts[2].x, verts[2].y, verts[2].z);
+		tri[tri_idx].vertex0 = verts[0];
+		tri[tri_idx].vertex1 = verts[1];
+		tri[tri_idx].vertex2 = verts[2];
+
+
+		//cout << "c" << tri[tri_idx].vertex0.x << ", " << tri[tri_idx].vertex0.y << ", " << tri[tri_idx].vertex0.z << endl;
+		//cout << tri[tri_idx].vertex1.x << ", " << tri[tri_idx].vertex1.y << ", " << tri[tri_idx].vertex1.z << endl;
+		//cout << tri[tri_idx].vertex2.x << ", " << tri[tri_idx].vertex2.y << ", " << tri[tri_idx].vertex2.z << endl;
+		//CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
+
+		tri_idx++;
+
+
+		//float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
+		//float3 r1 = float3(RandomFloat(), RandomFloat(), RandomFloat());
+		//float3 r2 = float3(RandomFloat(), RandomFloat(), RandomFloat());
+		//tri[i].vertex0 = r0 * 9 - float3(5);
+		//tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
 		//tri[0].vertex0 = float3(-4.0f, -4.0f, 0.0f);
 		//tri[0].vertex1 = float3(0.0f, -4.0f, 0.0f);
 		//tri[0].vertex2 = float3(-2.0f, 4.0f, -2.0f);
@@ -626,7 +659,7 @@ void BasicBVHApp::Init()
 		//CheckBounds(tri[0].vertex0, tri[0].vertex1, tri[0].vertex2);
 		//CheckBounds(tri[1].vertex0, tri[1].vertex1, tri[1].vertex2);
 		//CheckBounds(tri[2].vertex0, tri[2].vertex1, tri[2].vertex2);
-		CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
+		//CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
 	}
 
 	std::cout << grid.min.x << ", " << grid.min.y << ", " << grid.min.z << std::endl;
