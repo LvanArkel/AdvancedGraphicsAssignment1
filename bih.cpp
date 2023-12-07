@@ -17,7 +17,7 @@ TheApp* CreateApp() { return new BihApp(); }
 #define USE_SSE
 
 // triangle count
-#define N	12582 // hardcoded for the unity vehicle mesh
+#define N	50//12582 // hardcoded for the unity vehicle mesh
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -245,43 +245,80 @@ std::string DumpBih(int i) {
 
 
 
-bool IntersectBih(Ray& ray, aabb boundary, int nodeIdx) {
-	BihNode node = bihNode[nodeIdx];
-	if (node.type == 3) {
-		Tri triangle = tri[triIdx[node.triangle]];
-		IntersectTri(ray, triangle);
-		return ray.t < 1e30f;
+void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
+	uint nodeStack[64];
+	aabb boundaryStack[64];
+	int stackPtr = 0;
+
+	nodeStack[stackPtr] = bihRootIdx;
+	boundaryStack[stackPtr] = rootBoundary;
+
+	while (stackPtr >= 0) {
+		uint nodeI = nodeStack[stackPtr];
+		BihNode node = bihNode[nodeI];
+		aabb boundary = boundaryStack[stackPtr--];
+
+		if (node.type == 3) {
+			Tri triangle = tri[triIdx[node.triangle]];
+			IntersectTri(ray, triangle);
+			if (ray.t < 1e30f) {
+				return;
+			}
+			else {
+				continue;
+			}
+		}
+
+		aabb leftBound = boundary;
+		leftBound.bmax[node.type] = node.clip[0];
+		aabb rightBound = boundary;
+		rightBound.bmin[node.type] = node.clip[1];
+
+		// TODO: Intersections can be easier probably
+		float tLeft = IntersectAABB(ray, leftBound.bmin, leftBound.bmax);
+		float tRight = IntersectAABB(ray, rightBound.bmin, rightBound.bmax);
+	
+		// Cases
+		if (tLeft == 1e30f && tRight == 1e30f) {
+			// No hit
+			continue;
+		} else if (tLeft != 1e30f && tRight == 1e30f) {
+			// Only left hit
+			nodeStack[++stackPtr] = node.leftIdx;
+			boundaryStack[stackPtr] = leftBound;
+		}
+		else if (tLeft == 1e30f && tRight != 1e30f) {
+			// Only right hit
+			nodeStack[++stackPtr] = node.leftIdx + 1;
+			boundaryStack[stackPtr] = rightBound;
+		}
+		else {
+			// Double hit
+			if (ray.D[node.type] > 0) {
+				// Check left node first
+				nodeStack[++stackPtr] = node.leftIdx + 1;
+				boundaryStack[stackPtr] = rightBound;
+
+				nodeStack[++stackPtr] = node.leftIdx;
+				boundaryStack[stackPtr] = leftBound;
+			}
+			else {
+				// Check right node first
+				nodeStack[++stackPtr] = node.leftIdx;
+				boundaryStack[stackPtr] = leftBound;
+
+				nodeStack[++stackPtr] = node.leftIdx + 1;
+				boundaryStack[stackPtr] = rightBound;
+
+			}
+		}
+		
 	}
-	float3 leftBound = boundary.bmax; leftBound[node.type] = node.clip[0];
-	float3 rightBound = boundary.bmin; rightBound[node.type] = node.clip[1];
-	// TODO: Intersections can be easier probably
-	float tLeft = IntersectAABB(ray, boundary.bmin, leftBound);
-	float tRight = IntersectAABB(ray, rightBound, boundary.bmax);
-	if (tLeft == 1e30f && tRight == 1e30f) return false; // No bounding box hit
-	if (ray.D[node.type] > 0) {
-		// Check left node first
-		if (tLeft < 1e30f) {
-			if (IntersectBih(ray, aabb {boundary.bmin, leftBound}, node.leftIdx)) return true;
-		}
-		if (tRight < 1e30f) {
-			if (IntersectBih(ray, aabb{ rightBound, boundary.bmax }, node.leftIdx + 1)) return true;
-		}
-	}
-	else {
-		// Check right node first
-		if (tRight < 1e30f) {
-			if (IntersectBih(ray, aabb{ rightBound, boundary.bmax }, node.leftIdx + 1)) return true;
-		}
-		if (tLeft < 1e30f) {
-			if (IntersectBih(ray, aabb{ boundary.bmin, leftBound }, node.leftIdx)) return true;
-		}
-	}
-	return false;
 }
 
 void BihApp::Init()
 {
-	FILE* file = fopen( "assets/unity.tri", "r" );
+	/*FILE* file = fopen( "assets/unity.tri", "r" );
 	float a, b, c, d, e, f, g, h, i;
 	for (int t = 0; t < N; t++)
 	{
@@ -291,16 +328,16 @@ void BihApp::Init()
 		tri[t].vertex1 = float3( d, e, f );
 		tri[t].vertex2 = float3( g, h, i );
 	}
-	fclose( file );
+	fclose( file );*/
 	// intialize a scene with N random triangles
-	/*for (int i = 0; i < N; i++)
+	for (int i = 0; i < N; i++)
 	{
 		float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		float3 r1 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		float3 r2 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		tri[i].vertex0 = r0 * 9 - float3(5);
 		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
-	}*/
+	}
 	/*tri[0] = Tri{ 
 		float3(17.0, 29.0, 0.0),
 		float3(93.0, 47.0, 0.0),
@@ -333,7 +370,7 @@ void BihApp::Init()
 	};*/
 	// construct the BVH
 	BuildBih();
-	//std::cout << DumpBih(0) << "\n";
+	std::cout << DumpBih(0) << "\n";
 }
 
 const int POSITIONS = 2;
@@ -363,10 +400,10 @@ void BihApp::Tick( float deltaTime )
 	// draw the scene
 	screen->Clear( 0 );
 	// define the corners of the screen in worldspace
-	float3 p0( -2.5f, 0.8f, -0.5f ), p1( -0.5f, 0.8f, -0.5f ), p2( -2.5f, -1.2f, -0.5f );
-	float3 camera = float3(-1.5f, -0.2f, 2.5f);
-	/*float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
-	float3 camera = float3(0, 0, -18);*/
+	/*float3 p0( -2.5f, 0.8f, -0.5f ), p1( -0.5f, 0.8f, -0.5f ), p2( -2.5f, -1.2f, -0.5f );
+	float3 camera = float3(-1.5f, -0.2f, 2.5f);*/
+	float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
+	float3 camera = float3(0, 0, -18);
 	Ray ray;
 	Timer t;
 	// render tiles of pixels
@@ -375,23 +412,24 @@ void BihApp::Tick( float deltaTime )
 #else
 	int WINDOWHEIGHT = SCRHEIGHT;
 #endif
-	for (int y = 0; y < SCRHEIGHT; y += 4) for (int x = 0; x < SCRWIDTH; x += 4)
+	for (int y = 0; y < WINDOWHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
 	{
-		// render a single tile
-		for (int v = 0; v < 4; v++) for (int u = 0; u < 4; u++)
-		{
-			// calculate the position of a pixel on the screen in worldspace
-			float3 pixelPos = p0 + (p1 - p0) * ((x + u) / (float)SCRWIDTH) + (p2 - p0) * ((y + v) / (float)SCRHEIGHT);
-			// define the ray in worldspace
-			ray.O = camera;
-			ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
-			ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
-			IntersectBih(ray, totalBoundary, 0);
-			uint c = 500 - (int)(ray.t * 42);
-			if (ray.t < 1e30f) screen->Plot(x + u, y + v, c * 0x10101);
-		}
+		// calculate the position of a pixel on the screen in worldspace
+		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)WINDOWHEIGHT);
+		// define the ray in worldspace
+		ray.O = camera;
+		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
+		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
+		IntersectBih(ray, totalBoundary, 0);
+		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
+		if (ray.t < 1e30f) screen->Plot(x, y, 0xffffff);
+		/*uint c = 500 - (int)(ray.t * 42);
+		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);*/
 	}
 #ifdef DOUBLERENDER
+	for (int x = 0; x < SCRWIDTH; x++) {
+		screen->Plot(x, WINDOWHEIGHT, 0xffffff);
+	}
 	for (int y = 0; y < WINDOWHEIGHT; y++) {
 		for (int x = 0; x < SCRWIDTH; x++) {
 			// calculate the position of a pixel on the screen in worldspace
