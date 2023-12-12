@@ -1,7 +1,6 @@
 #include "precomp.h"
 #include "bih.h"
 #include "stb_image_write.h"
-#include <format>
 #include <string>
 
 // THIS SOURCE FILE:
@@ -22,8 +21,8 @@ TheApp* CreateApp() { return new BihApp(); }
 //#define SCENE 1 //LANDSCAPE
 
 //#define METHOD 0 // BVH
-//#define METHOD 1 // Grid
-#define METHOD 2 // BIH
+#define METHOD 1 // Grid
+//#define METHOD 2 // BIH
 
 #if SCENE == 0
 	#define N 12582
@@ -58,6 +57,29 @@ __declspec(align(64)) struct Ray
 // Method-specific structs
 #if METHOD == 0
 #elif METHOD == 1
+#define FLOAT_MAX  3.402823466e+38
+#define FLOAT_MIN  1.175494351e-38
+#define GRID_SIZE  64
+
+struct GridCell {
+public:
+	vector<int> triangles;
+};
+struct Grid {
+public:
+	GridCell grid[GRID_SIZE][GRID_SIZE][GRID_SIZE];
+	float3 min = float3(FLOAT_MAX); //min coordinates on the grid
+	float3 max = float3(FLOAT_MIN); //max coordinates on the grid
+	float3 origin = float3(0);
+	float3 size = float3(0.0f);
+	float3 cellSize = float3(0.0f);
+};
+
+struct IntersectionData {
+public:
+	int triIdx; //triangle index of intersection with ray
+	float t; //Ray's t parameter value at time of intersection
+};
 #elif METHOD == 2
 struct BihNode {
 	int type; // Lowest bits: axis (00, 01, 10) or leaf(11)
@@ -70,10 +92,14 @@ struct BihNode {
 #endif
 
 // application data
+Tri tri[N];
+
 #if METHOD == 0
 #elif METHOD == 1
+Grid grid;
+
+
 #elif METHOD == 2
-Tri tri[N];
 uint triIdx[N];
 BihNode bihNode[N * 2];
 uint bihRootIdx = 0, nodesUsed = 2;
@@ -134,6 +160,245 @@ float IntersectAABB_SSE( const Ray& ray, const __m128& bmin4, const __m128& bmax
 // Method specific functions
 #if METHOD == 0
 #elif METHOD == 1
+bool CheckGridCell(int x, int y, int z, Ray& ray, vector<IntersectionData>& intersected_triangles) {
+	//if(camera_position == 3) cout << x << "," << y << "," << z << endl;
+	GridCell gc = grid.grid[x][y][z];
+	vector<int> triangles = gc.triangles;
+	float t = ray.t;
+	for (int i = 0; i < triangles.size(); i++) {
+		IntersectTri(ray, tri[triangles[i]]);
+		if (ray.t < 1e30f) {
+			//cout << ray.t << endl;
+			t = min(t, ray.t);
+			/*	IntersectionData id;
+				id.t = ray.t;
+				id.triIdx = triangles[i];
+				intersected_triangles.push_back(id);*/
+		}
+	}
+
+	if (ray.t < 1e30f) {
+		ray.t = t;
+		return true;
+	}
+	return false;
+}
+
+bool FindRayGridIntersections(Ray& ray, float3& intersectionpoint, float3& exitpoint) {
+	float tNear, tFar;
+
+	float3 neart, fart;
+
+	// Check for parallel rays
+	if (ray.D.x == 0) if (ray.O.x < grid.min.x || ray.O.x > grid.max.x) return false; // No intersection
+	if (ray.D.y == 0) if (ray.O.y < grid.min.y || ray.O.y > grid.max.y) return false; // No intersection
+	if (ray.D.z == 0) if (ray.O.z < grid.min.z || ray.O.z > grid.max.z) return false; // No intersection
+
+	// Calculate t at intersection for each axis
+	neart.x = (grid.min.x - ray.O.x) / ray.D.x;
+	fart.x = (grid.max.x - ray.O.x) / ray.D.x;
+	neart.y = (grid.min.y - ray.O.y) / ray.D.y;
+	fart.y = (grid.max.y - ray.O.y) / ray.D.y;
+	neart.z = (grid.min.z - ray.O.z) / ray.D.z;
+	fart.z = (grid.max.z - ray.O.z) / ray.D.z;
+
+	// pick the closest and the furthest
+	tNear = max({ min(neart.x, fart.x), min(neart.y, fart.y), min(neart.z, fart.z) });
+	tFar = min({ max(neart.x, fart.x), max(neart.y, fart.y), max(neart.z, fart.z) });
+
+	// Check if there is any valid intersection
+	if (tNear > tFar || tFar < 0) {
+		return false; // No intersection
+	}
+
+	// Calculate both intersection points
+	intersectionpoint = ray.O + tNear * ray.D;
+	exitpoint = ray.O + tFar * ray.D;
+
+	//if (abs(exitpoint.x - intersectionpoint.x) > 1.0f || abs(exitpoint.y - intersectionpoint.y) > 1.0f || abs(exitpoint.z - intersectionpoint.z) > 1.0f) {
+	//	std::cout << intersectionpoint.x << ", " << intersectionpoint.y << ", " << intersectionpoint.z << std::endl;
+	//	std::cout << exitpoint.x << ", " << exitpoint.y << ", " << exitpoint.z << std::endl;
+	//}
+	return true;
+}
+
+int IntersectGrid(Ray& ray) {
+	int traversalSteps = 0;
+	float3 intersectionpoint, exitpoint;
+	if (!FindRayGridIntersections(ray, intersectionpoint, exitpoint)) return traversalSteps;
+
+	int dx = abs(exitpoint.x - intersectionpoint.x) / grid.cellSize.x;
+	int dy = abs(exitpoint.y - intersectionpoint.y) / grid.cellSize.y;
+	int dz = abs(exitpoint.z - intersectionpoint.z) / grid.cellSize.z;
+
+	int stepX = intersectionpoint.x < exitpoint.x ? 1 : -1;
+	int stepY = intersectionpoint.y < exitpoint.y ? 1 : -1;
+	int stepZ = intersectionpoint.z < exitpoint.z ? 1 : -1;
+	float hypotenuse = sqrt(dx * dx + dy * dy + dz * dz);
+	float tMaxX = hypotenuse * (grid.cellSize.x / 2.0f) / dx;
+	float tMaxY = hypotenuse * (grid.cellSize.y / 2.0f) / dy;
+	float tMaxZ = hypotenuse * (grid.cellSize.z / 2.0f) / dz;
+	float tDeltaX = hypotenuse / dx;
+	float tDeltaY = hypotenuse / dy;
+	float tDeltaZ = hypotenuse / dz;
+	//float tDeltaX = dx / abs(ray.D.x);
+	//float tDeltaY = dy / abs(ray.D.y);
+	//float tDeltaZ = dz / abs(ray.D.z);
+
+	//int cellIndex[] = { 0, 0, 0 };
+	int x0 = floor((intersectionpoint.x - grid.min.x) / grid.cellSize.x);
+	x0 = clamp(x0, 0, GRID_SIZE - 1);
+
+	//cellIndex[0] = clamp(cellIndex[0], 0, GRID_SIZE - 1);
+	int y0 = floor((intersectionpoint.y - grid.min.y) / grid.cellSize.y);
+	y0 = clamp(y0, 0, GRID_SIZE - 1);
+
+	//cellIndex[1] = clamp(cellIndex[1], 0, GRID_SIZE - 1);
+	int z0 = floor((intersectionpoint.z - grid.min.z) / grid.cellSize.z);
+	z0 = clamp(z0, 0, GRID_SIZE - 1);
+
+	//cellIndex[2] = clamp(cellIndex[2], 0, GRID_SIZE - 1);
+
+	vector<IntersectionData> intersected_triangles;
+	float t;
+	while (1) {
+		traversalSteps++;
+		tri_intrs_count++;
+		t = min({ tMaxX, tMaxY, tMaxZ });
+		if (CheckGridCell(x0, y0, z0, ray, intersected_triangles)) {
+			if (ray.t < t) return traversalSteps;
+		}
+		//CheckGridCell(x0, y0, z0, ray, intersected_triangles);
+		if (tMaxX < tMaxY) {
+			if (tMaxX < tMaxZ) {
+				x0 = x0 + stepX;
+				tMaxX = tMaxX + tDeltaX;
+			}
+			else if (tMaxX > tMaxZ) {
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+			}
+			else {
+				x0 = x0 + stepX;
+				tMaxX = tMaxX + tDeltaX;
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+			}
+		}
+		else if (tMaxX > tMaxY) {
+			if (tMaxY < tMaxZ) {
+				y0 = y0 + stepY;
+				tMaxY = tMaxY + tDeltaY;
+			}
+			else if (tMaxY > tMaxZ) {
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+			}
+			else {
+				y0 = y0 + stepY;
+				tMaxY = tMaxY + tDeltaY;
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+
+			}
+		}
+		else {
+			if (tMaxY < tMaxZ) {
+				y0 = y0 + stepY;
+				tMaxY = tMaxY + tDeltaY;
+				x0 = x0 + stepX;
+				tMaxX = tMaxX + tDeltaX;
+			}
+			else if (tMaxY > tMaxZ) {
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+			}
+			else {
+				x0 = x0 + stepX;
+				tMaxX = tMaxX + tDeltaX;
+				y0 = y0 + stepY;
+				tMaxY = tMaxY + tDeltaY;
+				z0 = z0 + stepZ;
+				tMaxZ = tMaxZ + tDeltaZ;
+
+			}
+		}
+		if (x0 >= GRID_SIZE || x0 < 0 || y0 >= GRID_SIZE || y0 < 0 || z0 >= GRID_SIZE || z0 < 0) return traversalSteps;
+
+		//std::cout << x0 << ", " << y0 << ", " << z0 << std::endl;
+	}
+}
+
+
+void BuildGrid() {
+	grid.size.x = (grid.max.x - grid.min.x);
+	grid.size.y = (grid.max.y - grid.min.y);
+	grid.size.z = (grid.max.z - grid.min.z);
+	grid.origin.x = grid.min.x + (grid.size.x / 2.0f);
+	grid.origin.y = grid.min.y + (grid.size.y / 2.0f);
+	grid.origin.z = grid.min.z + (grid.size.z / 2.0f);
+	grid.cellSize.x = grid.size.x / GRID_SIZE;
+	grid.cellSize.y = grid.size.y / GRID_SIZE;
+	grid.cellSize.z = grid.size.z / GRID_SIZE;
+	for (int i = 0; i < N; i++) {
+		float xmin = min(tri[i].vertex0.x, min(tri[i].vertex1.x, tri[i].vertex2.x));
+		float xmax = max(tri[i].vertex0.x, max(tri[i].vertex1.x, tri[i].vertex2.x));
+		float ymin = min(tri[i].vertex0.y, min(tri[i].vertex1.y, tri[i].vertex2.y));
+		float ymax = max(tri[i].vertex0.y, max(tri[i].vertex1.y, tri[i].vertex2.y));
+		float zmin = min(tri[i].vertex0.z, min(tri[i].vertex1.z, tri[i].vertex2.z));
+		float zmax = max(tri[i].vertex0.z, max(tri[i].vertex1.z, tri[i].vertex2.z));
+
+		//	std::cout << grid.cellSize.x << ", " << grid.cellSize.y << ", " << grid.cellSize.z << std::endl;
+
+
+		//std::cout << "i" << i << std::endl;
+		//std::cout << xmin << ", " << xmax << ", " << std::endl;
+		//std::cout << ymin << ", " << ymax << ", " << std::endl;
+		//std::cout << zmin << ", " << zmax << ", " << std::endl;
+		int xstart = floor(((xmin - grid.min.x) / grid.cellSize.x));
+		int ystart = floor((ymin - grid.min.y) / grid.cellSize.y);
+		int zstart = floor((zmin - grid.min.z) / grid.cellSize.z);
+		xstart = clamp(xstart - 1, 0, GRID_SIZE - 1);
+		ystart = clamp(ystart - 1, 0, GRID_SIZE - 1);
+		zstart = clamp(zstart - 1, 0, GRID_SIZE - 1);
+		int xend = floor(((xmax - grid.min.x) / grid.cellSize.x));
+		int yend = floor((ymax - grid.min.y) / grid.cellSize.y);
+		int zend = floor((zmax - grid.min.z) / grid.cellSize.z);
+		xend = clamp(xend + 1, 0, GRID_SIZE - 1);
+		yend = clamp(yend + 1, 0, GRID_SIZE - 1);
+		zend = clamp(zend + 1, 0, GRID_SIZE - 1);
+		int xsize = xend - xstart;
+		int ysize = yend - ystart;
+		int zsize = zend - zstart;
+		xsize = clamp(xsize, 0, GRID_SIZE - 1);
+		ysize = clamp(ysize, 0, GRID_SIZE - 1);
+		zsize = clamp(zsize, 0, GRID_SIZE - 1);
+
+
+		for (int x = xstart; x <= xstart + xsize; x++) {
+			//std::cout << "x" << x << std::endl;
+			for (int y = ystart; y <= ystart + ysize; y++) {
+				//std::cout << "y" << y << std::endl;
+				for (int z = zstart; z <= zstart + zsize; z++) {
+					grid.grid[x][y][z].triangles.push_back(i);
+				}
+			}
+}
+	}
+}
+
+void CheckBounds(float3 v0, float3 v1, float3 v2) {
+	float minx = min({ v0.x, v1.x, v2.x }), maxx = max({ v0.x, v1.x, v2.x });
+	float miny = min({ v0.y, v1.y, v2.y }), maxy = max({ v0.y, v1.y, v2.y });
+	float minz = min({ v0.z, v1.z, v2.z }), maxz = max({ v0.z, v1.z, v2.z });
+
+	if (minx < grid.min.x) grid.min.x = minx;
+	if (miny < grid.min.y) grid.min.y = miny;
+	if (minz < grid.min.z) grid.min.z = minz;
+	if (maxx > grid.max.x) grid.max.x = maxx;
+	if (maxy > grid.max.y) grid.max.y = maxy;
+	if (maxz > grid.max.z) grid.max.z = maxz;
+}
 #elif METHOD == 2
 void Subdivide(int nodeId, aabb boundary, int count) {
 	BihNode& node = bihNode[nodeId];
@@ -363,6 +628,8 @@ void BihApp::Init()
 		tri[t].vertex0 = float3(a, b, c);
 		tri[t].vertex1 = float3(d, e, f);
 		tri[t].vertex2 = float3(g, h, i);
+		if (METHOD == 1) CheckBounds(tri[t].vertex0, tri[t].vertex1, tri[t].vertex2);
+
 	}
 	fclose(file);
 #elif SCENE == 1
@@ -370,6 +637,7 @@ void BihApp::Init()
 	
 #if METHOD == 0
 #elif METHOD == 1
+	BuildGrid();
 #elif METHOD == 2
 	BuildBih();
 	//std::cout << DumpBih(0) << "\n";
@@ -447,6 +715,7 @@ void BihApp::Tick( float deltaTime )
 		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
 #if METHOD == 0
 #elif METHOD == 1
+		int traversals = IntersectGrid(ray);
 #elif METHOD == 2
 		int traversals = IntersectBih(ray, totalBoundary, 0);
 #endif

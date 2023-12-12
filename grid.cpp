@@ -65,6 +65,38 @@ uint triIdx[N];
 BVHNode bvhNode[N * 2];
 uint rootNodeIdx = 0, nodesUsed = 1;
 
+const int POSITIONS = 4;
+const int CAMERA_FRAMES = 5;
+int camera_position = 0;
+int counter = 0;
+
+float3 cameraPositions[POSITIONS] = {
+	float3(-1.5f, -0.2f, -3.5f),
+
+	float3(-4.5f, -0.2f, 0.0f),
+
+	float3(-1.5f, -0.2f, 3.5f),
+
+	float3(1.5f, -0.2f, 0.0f),
+};
+
+float3  cameraPoints[3 * POSITIONS] = {
+	float3(-2.5f, 0.8f, -1.5f),
+	float3(-0.5f, 0.8f, -1.5f),
+	float3(-2.5f, -1.2f, -1.5f),
+
+	float3(-2.5f, 0.8f, 1.0f),
+	float3(-2.5f, 0.8f, -1.0f),
+	float3(-2.5f, -1.2f, 1.0f),
+
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, 1.5f),
+
+	float3(-0.5f, 0.8f, -1.0f),
+	float3(-0.5f, 0.8f, 1.0f),
+	float3(-0.5f, -1.2f, -1.0f),
+};
 
 //analyzation data
 uint8_t intrs_data[SCRHEIGHT * SCRWIDTH * 3]; //intersection count data for image generation
@@ -92,7 +124,7 @@ void IntersectTri(Ray& ray, const Tri& tri)
 }
 
 bool CheckGridCell(int x, int y, int z, Ray& ray, vector<IntersectionData>& intersected_triangles) {
-	//std::cout << x << "," << y << "," << z << std::endl;
+	//if(camera_position == 3) cout << x << "," << y << "," << z << endl;
 	GridCell gc = grid.grid[x][y][z];
 	vector<int> triangles = gc.triangles;
 	float t = ray.t;
@@ -175,17 +207,24 @@ void IntersectGrid(Ray& ray) {
 	//float tDeltaY = dy / abs(ray.D.y);
 	//float tDeltaZ = dz / abs(ray.D.z);
 
-	int cellIndex[] = { 0, 0, 0 };
+	//int cellIndex[] = { 0, 0, 0 };
 	int x0 = floor((intersectionpoint.x - grid.min.x) / grid.cellSize.x);
-	cellIndex[0] = clamp(cellIndex[0], 0, GRID_SIZE - 1);
+	x0 = clamp(x0, 0, GRID_SIZE - 1);
+
+	//cellIndex[0] = clamp(cellIndex[0], 0, GRID_SIZE - 1);
 	int y0 = floor((intersectionpoint.y - grid.min.y) / grid.cellSize.y);
-	cellIndex[1] = clamp(cellIndex[1], 0, GRID_SIZE - 1);
+	y0 = clamp(y0, 0, GRID_SIZE - 1);
+
+	//cellIndex[1] = clamp(cellIndex[1], 0, GRID_SIZE - 1);
 	int z0 = floor((intersectionpoint.z - grid.min.z) / grid.cellSize.z);
-	cellIndex[2] = clamp(cellIndex[2], 0, GRID_SIZE - 1);
+	z0 = clamp(z0, 0, GRID_SIZE - 1);
+
+	//cellIndex[2] = clamp(cellIndex[2], 0, GRID_SIZE - 1);
 
 	vector<IntersectionData> intersected_triangles;
 	float t;
 	while (1) {
+
 		tri_intrs_count++;
 		t = min({ tMaxX, tMaxY, tMaxZ });
 		if (CheckGridCell(x0, y0, z0, ray, intersected_triangles)) {
@@ -363,38 +402,6 @@ void BasicBVHApp::Init()
 	BuildGrid();
 }
 
-const int POSITIONS = 4;
-const int CAMERA_FRAMES = 5;
-int camera_position = 0;
-int counter = 0;
-
-float3 cameraPositions[POSITIONS] = {
-	float3(-1.5f, -0.2f, 3.5f),
-
-	float3(-4.5f, -0.2f, 0.0f),
-
-	float3(-1.5f, -0.2f, 3.5f),
-
-	float3(1.5f, -0.2f, 0.0f),
-};
-
-float3  cameraPoints[3 * POSITIONS] = {
-	float3(-0.5f, 0.8f, 1.5f),
-	float3(-2.5f, 0.8f, 1.5f),
-	float3(-0.5f, -1.2f, 1.5f),
-
-	float3(-2.5f, 0.8f, 1.0f),
-	float3(-2.5f, 0.8f, -1.0f),
-	float3(-2.5f, -1.2f, 1.0f),
-
-	float3(-0.5f, 0.8f, 1.5f),
-	float3(-2.5f, 0.8f, 1.5f),
-	float3(-0.5f, -1.2f, 1.5f),
-
-	float3(-0.5f, 0.8f, -1.0f),
-	float3(-0.5f, 0.8f, 1.0f),
-	float3(-0.5f, -1.2f, -1.0f),
-};
 
 void TickGrid(Tmpl8::Surface* screen) {
 	if (counter % CAMERA_FRAMES == 0) {
