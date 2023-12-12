@@ -11,8 +11,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectName>bih</ProjectName>
-    <ProjectGuid>{FDEACBE4-710A-4D54-AA0C-5AF6A28D51D0}</ProjectGuid>
+    <ProjectName>assignment_1</ProjectName>
+    <ProjectGuid>{839B017A-02D8-4F42-B339-EFC6800E9CD5}</ProjectGuid>
     <RootNamespace>Tmpl8</RootNamespace>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
@@ -121,7 +121,7 @@
   </ItemDefinitionGroup>
   <!-- END Custom section -->
   <ItemGroup>
-    <ClCompile Include="bih.cpp" />
+    <ClCompile Include="assignment_1.cpp" />
     <ClCompile Include="template\template.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">precomp.h</PrecompiledHeaderFile>
@@ -130,7 +130,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="bih.h" />
+    <ClInclude Include="assignment_1.h" />
     <ClInclude Include="cl\tools.cl" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\precomp.h" />

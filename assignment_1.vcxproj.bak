@@ -12,7 +12,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectName>bih</ProjectName>
-    <ProjectGuid>{FDEACBE4-710A-4D54-AA0C-5AF6A28D51D0}</ProjectGuid>
+    <ProjectGuid>{839B017A-02D8-4F42-B339-EFC6800E9CD5}</ProjectGuid>
     <RootNamespace>Tmpl8</RootNamespace>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
