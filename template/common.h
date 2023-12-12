@@ -3,7 +3,11 @@
 
 // default screen resolution
 #define SCRWIDTH	1024
-#define SCRHEIGHT	512
+#ifdef DOUBLERENDER
+#define SCRHEIGHT	1024
+#else
+#define SCRHEIGHT 512
+#endif
 // #define FULLSCREEN
 
 // constants

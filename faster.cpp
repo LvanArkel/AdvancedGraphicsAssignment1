@@ -261,14 +261,69 @@ void FasterRaysApp::Init()
 	fclose( file );
 	// construct the BVH
 	BuildBVH();
+	aabb totalBoundary;
+	for (uint i = 0; i < N; i++) {
+		uint index = triIdx[i];
+		Tri& triangle = tri[index];
+		totalBoundary.grow(triangle.vertex0);
+		totalBoundary.grow(triangle.vertex1);
+		totalBoundary.grow(triangle.vertex2);
+	}
+	printf("bmin: %f %f %f, bmax: %f %f %f",
+		totalBoundary.bmin[0],
+		totalBoundary.bmin[1],
+		totalBoundary.bmin[2],
+		totalBoundary.bmax[0],
+		totalBoundary.bmax[1],
+		totalBoundary.bmax[2]);
 }
+
+const int POSITIONS = 4;
+const int CAMERA_FRAMES = 20;
+int camera_position = 0;
+int counter = 0;
+
+float3 cameraPositions[POSITIONS] = {
+	float3(-1.5f, -0.2f, -3.5f),
+
+	float3(-4.5f, -0.2f, 0.0f),
+
+	float3(-1.5f, -0.2f, 3.5f),
+
+	float3(1.5f, -0.2f, 0.0f),
+};
+
+float3  cameraPoints[3 * POSITIONS] = {
+	float3(-2.5f, 0.8f, -1.5f),
+	float3(-0.5f, 0.8f, -1.5f),
+	float3(-2.5f, -1.2f, -1.5f),
+
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, -1.5f),
+	float3(-2.5f, -1.2f, 1.5f),
+
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, 1.5f),
+
+	float3(-0.5f, 0.8f, -1.5f),
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, -1.5f),
+};
 
 void FasterRaysApp::Tick( float deltaTime )
 {
+	if (counter % CAMERA_FRAMES == 0) {
+		camera_position = (camera_position + 1) % POSITIONS;
+	}
+	//camera_position = 1;
+	counter += 1;
 	// draw the scene
 	screen->Clear( 0 );
 	// define the corners of the screen in worldspace
-	float3 p0( -2.5f, 0.8f, -0.5f ), p1( -0.5f, 0.8f, -0.5f ), p2( -2.5f, -1.2f, -0.5f );
+	float3 p0 = cameraPoints[3 * camera_position];
+	float3 p1 = cameraPoints[3 * camera_position+1];
+	float3 p2 = cameraPoints[3 * camera_position+2];
 	Ray ray;
 	Timer t;
 	// render tiles of pixels
@@ -280,7 +335,7 @@ void FasterRaysApp::Tick( float deltaTime )
 			// calculate the position of a pixel on the screen in worldspace
 			float3 pixelPos = p0 + (p1 - p0) * ((x + u) / (float)SCRWIDTH) + (p2 - p0) * ((y + v) / (float)SCRHEIGHT);
 			// define the ray in worldspace
-			ray.O = float3( -1.5f, -0.2f, -2.5f );
+			ray.O = cameraPositions[camera_position];
 			ray.D = normalize( pixelPos - ray.O ), ray.t = 1e30f;
 			// calculare reciprocal ray directions to speedup AABB intersections
 			ray.rD = float3( 1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z );
