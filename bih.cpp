@@ -430,8 +430,6 @@ void BihApp::Tick( float deltaTime )
 		ray.O = cameraPositions[camera_position];
 		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
 		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
-		ray.t = 1e30f;
-		bool bihHit = false;
 		IntersectBih(ray, totalBoundary, 0);
 		uint c = 500 - (int)(ray.t * 42);
 		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);
