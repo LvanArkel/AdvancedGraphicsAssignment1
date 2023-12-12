@@ -631,7 +631,9 @@ void BihApp::Init()
 		tri[t].vertex0 = float3(a, b, c);
 		tri[t].vertex1 = float3(d, e, f);
 		tri[t].vertex2 = float3(g, h, i);
-		if (METHOD == 1) CheckBounds(tri[t].vertex0, tri[t].vertex1, tri[t].vertex2);
+		#if METHOD == 1
+		CheckBounds(tri[t].vertex0, tri[t].vertex1, tri[t].vertex2);
+		#endif
 
 	}
 	fclose(file);
