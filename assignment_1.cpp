@@ -70,7 +70,7 @@ __declspec(align(64)) struct Ray
 #elif METHOD == 1
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
-#define GRID_SIZE  64
+#define GRID_SIZE  128
 
 struct GridCell {
 public:
@@ -677,6 +677,9 @@ void BihApp::Init()
 		tri[triidx].vertex0 = float3(vertices[indices[i]].Position.X, vertices[indices[i]].Position.Y, vertices[indices[i]].Position.Z);
 		tri[triidx].vertex1 = float3(vertices[indices[i + 1]].Position.X, vertices[indices[i + 1]].Position.Y, vertices[indices[i + 1]].Position.Z);
 		tri[triidx].vertex2 = float3(vertices[indices[i + 2]].Position.X, vertices[indices[i + 2]].Position.Y, vertices[indices[i + 2]].Position.Z);
+#if METHOD == 1
+		CheckBounds(tri[triidx].vertex0, tri[triidx].vertex1, tri[triidx].vertex2);
+#endif
 	}
 #endif
 	
