@@ -2,7 +2,7 @@
 #include "assignment_1.h"
 #include "stb_image_write.h"
 #include "OBJ_Loader.h"
-
+#include <iostream>
 #include <string>
 
 // THIS SOURCE FILE:
@@ -25,6 +25,14 @@ TheApp* CreateApp() { return new BihApp(); }
 //#define METHOD 0 // BVH
 #define METHOD 1 // Grid
 //#define METHOD 2 // BIH
+
+#if METHOD == 0
+	#define METHOD_NAME "BVH"
+#elif METHOD == 1
+	#define METHOD_NAME "Grid"
+#elif METHOD == 2
+	#define METHOD_NAME "BIH"
+#endif
 
 #if SCENE == 0
 	#define N 12582
@@ -112,6 +120,7 @@ aabb totalBoundary;
 // Analysis data
 int traversal_steps[SCRHEIGHT * SCRWIDTH];
 int triangle_intersects[SCRHEIGHT * SCRWIDTH];
+uint8_t intrs_data[SCRWIDTH * SCRHEIGHT * 3];
 int tri_intrs_count;
 int min_traversal_steps;
 int min_triangle_intersections;
@@ -619,6 +628,21 @@ int IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 }
 #endif
 
+//#define RECORD_TIME
+#define RECORD_RAYS
+
+#ifdef RECORD_TIME
+const int CAMERA_FRAMES = 10;
+float times[CAMERA_FRAMES];
+#endif
+#ifdef RECORD_RAYS
+const int CAMERA_FRAMES = 1;
+#endif
+
+int camera_position = 0;
+int counter = 0;
+float total_time_ms;
+
 void BihApp::Init()
 {
 #if SCENE == 0
@@ -664,13 +688,28 @@ void BihApp::Init()
 	printf("aabb (%f, %f, %f : %f, %f, %f)\n", totalBoundary.bmin[0], totalBoundary.bmin[1], totalBoundary.bmin[2], totalBoundary.bmax[0], totalBoundary.bmax[1], totalBoundary.bmax[2]);
 	//std::cout << DumpBih(0) << "\n";
 #endif
+
+#ifdef RECORD_TIME
+	string filename;
+	filename += OBJ_NAME;
+	filename += "_";
+	filename += METHOD_NAME;
+	filename += "_time.csv";
+	timefile.open(filename.c_str());
+#endif
+
+#ifdef RECORD_RAYS
+	string filename;
+	filename += OBJ_NAME;
+	filename += "_";
+	filename += METHOD_NAME;
+	filename += "_rays.csv";
+	rayfile.open(filename.c_str());
+	rayfile << "camera position, ray_i, traversal steps, triangle intersections";
+#endif
 }
 
 const int POSITIONS = 4;
-const int CAMERA_FRAMES = 20;
-int camera_position = 0;
-int counter = 0;
-
 #if SCENE == 0
 float3 cameraPositions[POSITIONS] = {
 	float3(-1.5f, -0.2f, -3.5f),
@@ -737,7 +776,6 @@ void BihApp::Tick( float deltaTime )
 	max_traversal_steps = 0;
 	max_triangle_intersects = 0;
 	//camera_position = 3;
-	counter += 1;
 	// draw the scene
 	screen->Clear(0);
 	// define the corners of the screen in worldspace
@@ -770,27 +808,74 @@ void BihApp::Tick( float deltaTime )
 
 		traversal_steps[ind] = traversals;
 		triangle_intersects[ind] = tri_intrs_count;
-		ind += 1;
 		min_traversal_steps = min(min_traversal_steps, traversals);
 		min_triangle_intersections = min(min_triangle_intersections, tri_intrs_count);
 		max_traversal_steps = max(max_traversal_steps, traversals);
 		max_triangle_intersects = max(max_triangle_intersects, tri_intrs_count);
+
+#ifdef RECORD_RAYS
+		rayfile << camera_position << ", " << ind << ", " << traversals << ", " << tri_intrs_count << "\n";
+#endif
+		ind += 1;
 	}
 	float elapsed = t.elapsed() * 1000;
+#ifdef RECORD_TIME
+	times[counter] = elapsed;
+#endif
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
 
+	counter = (counter + 1) % CAMERA_FRAMES;
+	if (counter == 0) {
+#ifdef RECORD_TIME
+		timefile << "Position " << camera_position << ": ";
+		for (int i = 0; i < CAMERA_FRAMES-1; i++) {
+			timefile << times[i] << ", ";
+		}
+		timefile << times[CAMERA_FRAMES - 1] << "\n";
+#endif
 
-	if (counter % CAMERA_FRAMES == 0) {
+		std::string intersect_filename;
+		intersect_filename += OBJ_NAME;
+		intersect_filename += "_";
+		intersect_filename += METHOD_NAME;
+		intersect_filename += "_CAM";
+		intersect_filename += to_string(camera_position);
+		intersect_filename += "_intersects.png";
+		for (int i = 0; i < SCRHEIGHT * SCRWIDTH; i++) {
+			intrs_data[3 * i] = 0;
+			intrs_data[3 * i + 1] = (int)((255.0f / (float)max_triangle_intersects) * triangle_intersects[i]);
+			intrs_data[3 * i + 2] = 0;
+		}
+		stbi_write_png(intersect_filename.c_str(), SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
+
+		std::string traversal_filename;
+		traversal_filename += OBJ_NAME;
+		traversal_filename += "_";
+		traversal_filename += METHOD_NAME;
+		traversal_filename += "_CAM";
+		traversal_filename += to_string(camera_position);
+		traversal_filename += "_traversals.png";
+		for (int i = 0; i < SCRHEIGHT * SCRWIDTH; i++) {
+			intrs_data[3 * i] = (int)((255.0f / (float)max_traversal_steps) * traversal_steps[i]);
+			intrs_data[3 * i + 1] = 0;
+			intrs_data[3 * i + 2] = 0;
+		}
+		stbi_write_png(traversal_filename.c_str(), SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
+
+
+#if defined(RECORD_TIME) || defined(RECORD_RAYS)
+		if (camera_position + 1 == POSITIONS) {
+			timefile.close();
+			rayfile.close();
+			exit(-1);
+		}
+		else {
+			camera_position += 1;
+		}
+#else
 		camera_position = (camera_position + 1) % POSITIONS;
+#endif
 	}
-
-	/*if (counter % CAMERA_FRAMES == 0) {
-		std::string filename;
-		filename += "intersection-count";
-		filename += to_string(camera_position);
-		filename += ".png";
-		stbi_write_png(filename.c_str(), SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
-	}*/
 }
 
 // EOF

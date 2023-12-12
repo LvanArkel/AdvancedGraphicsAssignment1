@@ -3,6 +3,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define FAST_OBJ_IMPLEMENTATION
 
+ofstream timefile;
+ofstream rayfile;
+
 namespace Tmpl8
 {
 
@@ -12,7 +15,7 @@ public:
 	// game flow methods
 	void Init();
 	void Tick( float deltaTime );
-	void Shutdown() { /* implement if you want to do something on exit */ }
+	void Shutdown() { timefile.close(); rayfile.close(); }
 	// input handling
 	void MouseUp( int button ) { /* implement if you want to detect mouse button presses */ }
 	void MouseDown( int button ) { /* implement if you want to detect mouse button presses */ }
