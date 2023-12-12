@@ -15,12 +15,10 @@
 TheApp* CreateApp() { return new BasicBVHApp(); }
 
 // triangle count
-#define N	15488	
+#define N	12582	
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
 #define GRID_SIZE  64
-
-#define GRID_ACC 1
 
 #define OBJ_PATH "data/scene1/suzanne2.obj"
 
@@ -93,106 +91,6 @@ void IntersectTri(Ray& ray, const Tri& tri)
 	if (t > 0.0001f) ray.t = min(ray.t, t);
 }
 
-bool IntersectAABB(const Ray& ray, const float3 bmin, const float3 bmax)
-{
-	float tx1 = (bmin.x - ray.O.x) / ray.D.x, tx2 = (bmax.x - ray.O.x) / ray.D.x;
-	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
-	float ty1 = (bmin.y - ray.O.y) / ray.D.y, ty2 = (bmax.y - ray.O.y) / ray.D.y;
-	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
-	float tz1 = (bmin.z - ray.O.z) / ray.D.z, tz2 = (bmax.z - ray.O.z) / ray.D.z;
-	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
-	return tmax >= tmin && tmin < ray.t && tmax > 0;
-}
-
-void IntersectBVH(Ray& ray, const uint nodeIdx)
-{
-	BVHNode& node = bvhNode[nodeIdx];
-	if (!IntersectAABB(ray, node.aabbMin, node.aabbMax)) return;
-	if (node.isLeaf())
-	{
-		for (uint i = 0; i < node.triCount; i++)
-			IntersectTri(ray, tri[triIdx[node.leftFirst + i]]);
-	}
-	else
-	{
-		IntersectBVH(ray, node.leftFirst);
-		IntersectBVH(ray, node.leftFirst + 1);
-	}
-}
-
-void BuildBVH()
-{
-	// populate triangle index array
-	for (int i = 0; i < N; i++) triIdx[i] = i;
-	// calculate triangle centroids for partitioning
-	for (int i = 0; i < N; i++)
-		tri[i].centroid = (tri[i].vertex0 + tri[i].vertex1 + tri[i].vertex2) * 0.3333f;
-	// assign all triangles to root node
-	BVHNode& root = bvhNode[rootNodeIdx];
-	root.leftFirst = 0, root.triCount = N;
-	UpdateNodeBounds(rootNodeIdx);
-	// subdivide recursively
-	Subdivide(rootNodeIdx);
-}
-
-void UpdateNodeBounds(uint nodeIdx)
-{
-	BVHNode& node = bvhNode[nodeIdx];
-	node.aabbMin = float3(1e30f);
-	node.aabbMax = float3(-1e30f);
-	for (uint first = node.leftFirst, i = 0; i < node.triCount; i++)
-	{
-		uint leafTriIdx = triIdx[first + i];
-		Tri& leafTri = tri[leafTriIdx];
-		node.aabbMin = fminf(node.aabbMin, leafTri.vertex0),
-			node.aabbMin = fminf(node.aabbMin, leafTri.vertex1),
-			node.aabbMin = fminf(node.aabbMin, leafTri.vertex2),
-			node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex0),
-			node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex1),
-			node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex2);
-	}
-}
-
-void Subdivide(uint nodeIdx)
-{
-	// terminate recursion
-	BVHNode& node = bvhNode[nodeIdx];
-	if (node.triCount <= 2) return;
-	// determine split axis and position
-	float3 extent = node.aabbMax - node.aabbMin;
-	int axis = 0;
-	if (extent.y > extent.x) axis = 1;
-	if (extent.z > extent[axis]) axis = 2;
-	float splitPos = node.aabbMin[axis] + extent[axis] * 0.5f;
-	// in-place partition
-	int i = node.leftFirst;
-	int j = i + node.triCount - 1;
-	while (i <= j)
-	{
-		if (tri[triIdx[i]].centroid[axis] < splitPos)
-			i++;
-		else
-			swap(triIdx[i], triIdx[j--]);
-	}
-	// abort split if one of the sides is empty
-	int leftCount = i - node.leftFirst;
-	if (leftCount == 0 || leftCount == node.triCount) return;
-	// create child nodes
-	int leftChildIdx = nodesUsed++;
-	int rightChildIdx = nodesUsed++;
-	bvhNode[leftChildIdx].leftFirst = node.leftFirst;
-	bvhNode[leftChildIdx].triCount = leftCount;
-	bvhNode[rightChildIdx].leftFirst = i;
-	bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
-	node.leftFirst = leftChildIdx;
-	node.triCount = 0;
-	UpdateNodeBounds(leftChildIdx);
-	UpdateNodeBounds(rightChildIdx);
-	// recurse
-	Subdivide(leftChildIdx);
-	Subdivide(rightChildIdx);
-}
-
 bool CheckGridCell(int x, int y, int z, Ray& ray, vector<IntersectionData>& intersected_triangles) {
 	//std::cout << x << "," << y << "," << z << std::endl;
 	GridCell gc = grid.grid[x][y][z];
@@ -203,24 +101,18 @@ bool CheckGridCell(int x, int y, int z, Ray& ray, vector<IntersectionData>& inte
 		if (ray.t < 1e30f) {
 			//cout << ray.t << endl;
 			t = min(t, ray.t);
-		/*	IntersectionData id;
-			id.t = ray.t;
-			id.triIdx = triangles[i];
-			intersected_triangles.push_back(id);*/
+			/*	IntersectionData id;
+				id.t = ray.t;
+				id.triIdx = triangles[i];
+				intersected_triangles.push_back(id);*/
 		}
 	}
-	
+
 	if (ray.t < 1e30f) {
 		ray.t = t;
 		return true;
 	}
 	return false;
-}
-
-void GetStepSizes(Ray& ray) {
-	float sx, sy, sz = 0; //scaling values
-
-
 }
 
 bool FindRayGridIntersections(Ray& ray, float3& intersectionpoint, float3& exitpoint) {
@@ -411,82 +303,13 @@ void BuildGrid() {
 			for (int y = ystart; y <= ystart + ysize; y++) {
 				//std::cout << "y" << y << std::endl;
 				for (int z = zstart; z <= zstart + zsize; z++) {
-					//std::cout << "z" << z << std::endl;
-					//std::cout << "x" << x << "y" << y << "z" << z << std::endl;
 					grid.grid[x][y][z].triangles.push_back(i);
 				}
 			}
 		}
 	}
-	//for (int x = 0; x < GRID_SIZE; x++) {
-	//	for (int y = 0; y < GRID_SIZE; y++) {
-	//		for (int z = 0; z < GRID_SIZE; z++) {
-	//			cout << "   " << x << ", " << y << ", " << z << "-->" << grid.grid[x][y][z].triangles.size();
-	//		}
-	//	}
-	//	cout << endl;
-	//}
 }
-void BuildGird() {
-	grid.size.x = (grid.max.x - grid.min.x);
-	grid.size.y = (grid.max.y - grid.min.y);
-	grid.size.z = (grid.max.z - grid.min.z);
-	grid.origin.x = grid.min.x + (grid.size.x / 2.0f);
-	grid.origin.y = grid.min.y + (grid.size.y / 2.0f);
-	grid.origin.z = grid.min.z + (grid.size.z / 2.0f);
-	grid.cellSize.x = grid.size.x / GRID_SIZE;
-	grid.cellSize.y = grid.size.y / GRID_SIZE;
-	grid.cellSize.z = grid.size.z / GRID_SIZE;
 
-
-	float n = 1; //expected average number of objects per cell
-	float gridVolume = grid.size.x * grid.size.y * grid.size.z;
-	float3 gridRes;
-	gridRes.x = grid.size.x * cbrt((n * GRID_SIZE) / gridVolume);
-	gridRes.y = grid.size.y * cbrt((n * GRID_SIZE) / gridVolume);
-	gridRes.z = grid.size.z * cbrt((n * GRID_SIZE) / gridVolume);
-
-	for (int i = 0; i < N; i++) {
-		Tri triangle = tri[i];
-		float3 trimin, trimax;
-		trimin.x = min({ triangle.vertex0.x, triangle.vertex1.x, triangle.vertex2.x });
-		trimax.x = max({ triangle.vertex0.x, triangle.vertex1.x, triangle.vertex2.x });
-		trimin.y = min({ triangle.vertex0.y, triangle.vertex1.y, triangle.vertex2.y });
-		trimax.y = max({ triangle.vertex0.y, triangle.vertex1.y, triangle.vertex2.y });
-		trimin.z = min({ triangle.vertex0.z, triangle.vertex1.z, triangle.vertex2.z });
-		trimax.z = max({ triangle.vertex0.z, triangle.vertex1.z, triangle.vertex2.z });
-		float3 mincell, maxcell;
-		mincell.x = trimin.x / grid.cellSize.x;
-		maxcell.x = trimax.x / grid.cellSize.x;
-		mincell.y = trimin.y / grid.cellSize.y;
-		maxcell.y = trimax.y / grid.cellSize.y;
-		mincell.z = trimin.z / grid.cellSize.z;
-		maxcell.z = trimax.z / grid.cellSize.z;
-
-		for (int z = mincell.z; z <= maxcell.z; z++) {
-			for (int y = mincell.y; y <= maxcell.y; y++) {
-				for (int x = mincell.x; x <= maxcell.x; x++) {
-					grid.grid[x][y][x].triangles.push_back(i);
-				}
-			}
-		}
-		for (int x = 0; x < GRID_SIZE; x++) {
-			for (int y = 0; y < GRID_SIZE; y++) {
-				for (int z = 0; z < GRID_SIZE; z++) {
-					cout << "   " << x << ", " << y << ", " << z << "-->" << grid.grid[x][y][z].triangles.size();
-				}
-			}
-			cout << endl;
-		}
-		//float gridVolume = grid.size.x * grid.size.y * grid.size.z;
-		//float n = 1; //expected average number of objects per cell
-		//float cellSize = cbrt(n * gridVolume / N);
-		//float cellVolume = cellSize * cellSize * cellSize;
-		//float numCells = gridVolume / cellVolume;
-
-
-	}
-}
 void CheckBounds(float3 v0, float3 v1, float3 v2) {
 	float minx = min({ v0.x, v1.x, v2.x }), maxx = max({ v0.x, v1.x, v2.x });
 	float miny = min({ v0.y, v1.y, v2.y }), maxy = max({ v0.y, v1.y, v2.y });
@@ -502,101 +325,92 @@ void CheckBounds(float3 v0, float3 v1, float3 v2) {
 
 void BasicBVHApp::Init()
 {
-	objl::Loader loader;
-	loader.LoadFile(OBJ_PATH);
-	vector<objl::Vertex> vertices = loader.LoadedMeshes[0].Vertices;
+	//objl::Loader loader;
+	//loader.LoadFile(OBJ_PATH);
+	//vector<objl::Vertex> vertices = loader.LoadedMeshes[0].Vertices;
 
-	int triidx = 0;
+	//int triidx = 0;
+	////for (int i = 0; i < N * 3; i += 3)
 	//for (int i = 0; i < N * 3; i += 3)
-	for (int i = 0; i < N * 3; i += 3)
+	//{
+	//	//cout << vertices[i].Position.X << ", " << vertices[i].Position.Y << ", " << vertices[i].Position.Z << endl;
+	//	tri[triidx].vertex0 = float3(vertices[i].Position.X, vertices[i].Position.Y, vertices[i].Position.Z);
+	//	tri[triidx].vertex1 = float3(vertices[i + 1].Position.X, vertices[i + 1].Position.Y, vertices[i + 1].Position.Z);
+	//	tri[triidx].vertex2 = float3(vertices[i + 2].Position.X, vertices[i + 2].Position.Y, vertices[i + 2].Position.Z);
+
+	//	CheckBounds(tri[triidx].vertex0, tri[triidx].vertex1, tri[triidx].vertex2);
+
+	//	triidx++;
+	//}
+
+	//std::cout << "grid min; " << grid.min.x << ", " << grid.min.y << ", " << grid.min.z << std::endl;
+	//std::cout << "grid max; " << grid.max.x << ", " << grid.max.y << ", " << grid.max.z << std::endl;
+	//BuildGrid();
+
+	FILE* file = fopen("assets/unity.tri", "r");
+	float a, b, c, d, e, f, g, h, i;
+	for (int t = 0; t < N; t++)
 	{
-		//cout << vertices[i].Position.X << ", " << vertices[i].Position.Y << ", " << vertices[i].Position.Z << endl;
-		tri[triidx].vertex0 = float3(vertices[i].Position.X, vertices[i].Position.Y, vertices[i].Position.Z);
-		tri[triidx].vertex1 = float3(vertices[i + 1].Position.X, vertices[i + 1].Position.Y, vertices[i + 1].Position.Z);
-		tri[triidx].vertex2 = float3(vertices[i + 2].Position.X, vertices[i + 2].Position.Y, vertices[i + 2].Position.Z);
-
-#if GRID_ACC:
-		CheckBounds(tri[triidx].vertex0, tri[triidx].vertex1, tri[triidx].vertex2);
-#endif
-
-		triidx++;
-
-
-
-
-		//float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		//float3 r1 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		//float3 r2 = float3(RandomFloat(), RandomFloat(), RandomFloat());
-		//tri[i].vertex0 = r0 * 9 - float3(5);
-		//tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
-		//CheckBounds(tri[i].vertex0, tri[i].vertex1, tri[i].vertex2);
-		//tri[0].vertex0 = float3(-4.0f, -4.0f, 0.0f);
-		//tri[0].vertex1 = float3(0.0f, -4.0f, 0.0f);
-		//tri[0].vertex2 = float3(-2.0f, 4.0f, -2.0f);
-		//tri[1].vertex0 = float3(0.0f, 4.0f, 2.0f);
-		//tri[1].vertex1 = float3(4.0f, 4.0f, 2.0f);
-		//tri[1].vertex2 = float3(-3.0f, -4.0f, -2.0f);
-		//tri[2].vertex0 = float3(3.0f, 0.0f, 0.0f);
-		//tri[2].vertex1 = float3(4.0f, 0.0f, 0.0f);
-		//tri[2].vertex2 = float3(3.5f, 1.0f, 0.0f);
-		//std::cout << tri[i].vertex0.x << ", " << tri[i].vertex0.y << ", " << tri[i].vertex0.z << std::endl;
-		//CheckBounds(tri[0].vertex0, tri[0].vertex1, tri[0].vertex2);
-		//CheckBounds(tri[1].vertex0, tri[1].vertex1, tri[1].vertex2);
-		//CheckBounds(tri[2].vertex0, tri[2].vertex1, tri[2].vertex2);
+		fscanf(file, "%f %f %f %f %f %f %f %f %f\n",
+			&a, &b, &c, &d, &e, &f, &g, &h, &i);
+		tri[t].vertex0 = float3(a, b, c);
+		tri[t].vertex1 = float3(d, e, f);
+		tri[t].vertex2 = float3(g, h, i);
+		CheckBounds(tri[t].vertex0, tri[t].vertex1, tri[t].vertex2);
 
 	}
-
-	std::cout << "grid min; " << grid.min.x << ", " << grid.min.y << ", " << grid.min.z << std::endl;
-	std::cout << "grid max; " << grid.max.x << ", " << grid.max.y << ", " << grid.max.z << std::endl;
-#if GRID_ACC:
+	fclose(file);
 	BuildGrid();
-#else
-	// construct the BVH
-	BuildBVH();
-#endif
 }
 
-void TickBVH(Tmpl8::Surface* screen) {
-	// draw the scene
-	screen->Clear(0);
-	// define the corners of the screen in worldspace
-	float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
-	Ray ray;
-	Timer t;
-	int ind = 0;
+const int POSITIONS = 4;
+const int CAMERA_FRAMES = 5;
+int camera_position = 0;
+int counter = 0;
 
-	for (int y = 0; y < SCRHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++) {
-		// calculate the position of a pixel on the screen in worldspace
-		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
-		// define the ray in worldspace
-		ray.O = float3(0, 0, -19);
-		ray.D = normalize(pixelPos - ray.O);
-		// initially the ray has an 'infinite length'
-		ray.t = 1e30f;
-#if 0
-		for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
-#else
-		IntersectBVH(ray, rootNodeIdx);
-#endif
-		uint c = 500 - (int)(ray.t * 42);
-		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);
+float3 cameraPositions[POSITIONS] = {
+	float3(-1.5f, -0.2f, 3.5f),
 
-		intrs_data[ind++] = 0, intrs_data[ind++] = (int)((255.0f / (N * 0.001f)) * tri_intrs_count), intrs_data[ind++] = 0;
-		tri_intrs_count = 0;
-	}
-	float elapsed = t.elapsed() * 1000;
-	printf("tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr(630) / elapsed);
+	float3(-4.5f, -0.2f, 0.0f),
 
-	stbi_write_png("intsection-count.png", SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
-}
+	float3(-1.5f, -0.2f, 3.5f),
+
+	float3(1.5f, -0.2f, 0.0f),
+};
+
+float3  cameraPoints[3 * POSITIONS] = {
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, 1.5f),
+
+	float3(-2.5f, 0.8f, 1.0f),
+	float3(-2.5f, 0.8f, -1.0f),
+	float3(-2.5f, -1.2f, 1.0f),
+
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, 1.5f),
+
+	float3(-0.5f, 0.8f, -1.0f),
+	float3(-0.5f, 0.8f, 1.0f),
+	float3(-0.5f, -1.2f, -1.0f),
+};
 
 void TickGrid(Tmpl8::Surface* screen) {
+	if (counter % CAMERA_FRAMES == 0) {
+		camera_position = (camera_position + 1) % POSITIONS;
+	}
+	//camera_position = 1;
+	counter += 1;
 	// draw the scene
 	screen->Clear(0);
 	// define the corners of the screen in worldspace
-	float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
+	float3 p0 = cameraPoints[3 * camera_position];
+	float3 p1 = cameraPoints[3 * camera_position + 1];
+	float3 p2 = cameraPoints[3 * camera_position + 2];
 	Ray ray;
 	Timer t;
+
 
 	int count = 0;
 	int ind = 0;
@@ -607,7 +421,7 @@ void TickGrid(Tmpl8::Surface* screen) {
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
-		ray.O = float3(0, 0, -25);
+		ray.O = cameraPositions[camera_position];
 		ray.D = normalize(pixelPos - ray.O);
 		// initially the ray has an 'infinite length'
 		ray.t = 1e30f;
@@ -615,19 +429,6 @@ void TickGrid(Tmpl8::Surface* screen) {
 		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
 
 		IntersectGrid(ray);
-
-		//for (int x = 0; x < GRID_SIZE; x++) {
-		//	//std::cout << x << std::endl;
-		//	for (int y = 0; y < GRID_SIZE; y++) {
-		//		for (int z = 0; z < GRID_SIZE; z++) {
-		//			CheckGridCell(x, y, z, ray);
-		//			//vector<int> triidxs = grid.grid[x][y][z].triangles;
-		//			//for (int i = 0; i < triidxs.size(); i++) {
-		//			//	
-		//			//}
-		//		}
-		//	}
-		//}
 
 		//intrs_data[ind++] = 0, intrs_data[ind++] = (int)((255.0f / (N * 0.1f)) * tri_intrs_count), intrs_data[ind++] = 0;
 		intrs_data[ind++] = (int)((255.0f / (N * 0.005f)) * tri_intrs_count), intrs_data[ind++] = 0, intrs_data[ind++] = 0;
@@ -644,11 +445,7 @@ void TickGrid(Tmpl8::Surface* screen) {
 
 void BasicBVHApp::Tick(float deltaTime)
 {
-#if GRID_ACC:
 	TickGrid(screen);
-#else
-	TickBVH(screen);
-#endif
 }
 
 // EOF
