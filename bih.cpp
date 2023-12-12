@@ -1,5 +1,7 @@
 #include "precomp.h"
 #include "bih.h"
+#include "stb_image_write.h"
+#include <format>
 #include <string>
 
 // THIS SOURCE FILE:
@@ -60,10 +62,18 @@ BihNode bihNode[N * 2];
 uint bihRootIdx = 0, nodesUsed = 2;
 aabb totalBoundary;
 
+// Analysis data
+int traversal_steps[SCRHEIGHT * SCRWIDTH];
+int triangle_intersects[SCRHEIGHT * SCRWIDTH];
+int tri_intrs_count;
+int max_traversal_steps;
+int max_triangle_intersects;
+
 // functions
 
 void IntersectTri( Ray& ray, const Tri& tri )
 {
+	tri_intrs_count++;
 	const float3 edge1 = tri.vertex1 - tri.vertex0;
 	const float3 edge2 = tri.vertex2 - tri.vertex0;
 	const float3 h = cross( ray.D, edge2 );
@@ -244,7 +254,7 @@ std::string DumpBih(int i) {
 
 
 
-void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
+int IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 	uint nodeStack[64];
 	aabb boundaryStack[64];
 	int stackPtr = 0;
@@ -252,7 +262,10 @@ void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 	nodeStack[stackPtr] = bihRootIdx;
 	boundaryStack[stackPtr] = rootBoundary;
 
+	int counter = 0;
+
 	while (stackPtr >= 0) {
+		counter++;
 		uint nodeI = nodeStack[stackPtr];
 		BihNode node = bihNode[nodeI];
 		aabb boundary = boundaryStack[stackPtr--];
@@ -261,7 +274,7 @@ void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 			Tri triangle = tri[triIdx[node.triangle]];
 			IntersectTri(ray, triangle);
 			if (ray.t < 1e30f) {
-				return;
+				return counter;
 			}
 			else {
 				continue;
@@ -313,6 +326,7 @@ void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 		}
 		
 	}
+	return counter;
 }
 
 void BihApp::Init()
@@ -408,6 +422,8 @@ float3  cameraPoints[3 * POSITIONS] = {
 
 void BihApp::Tick( float deltaTime )
 {
+	max_traversal_steps = 0;
+	max_triangle_intersects = 0;
 	if (counter % CAMERA_FRAMES == 0) {
 		camera_position = (camera_position + 1) % POSITIONS;
 	}
@@ -421,24 +437,38 @@ void BihApp::Tick( float deltaTime )
 	float3 p2 = cameraPoints[3 * camera_position + 2];
 	Ray ray;
 	Timer t;
+	// analysis
+	int ind = 0;
+
 	// render tiles of pixels
 	for (int y = 0; y < SCRHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
 	{
+		tri_intrs_count = 0;
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
 		ray.O = cameraPositions[camera_position];
 		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
 		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
-		IntersectBih(ray, totalBoundary, 0);
+		int traversals = IntersectBih(ray, totalBoundary, 0);
 		uint c = 500 - (int)(ray.t * 42);
 		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);
 
-		/*uint c = 500 - (int)(ray.t * 42);
-		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);*/
+		traversal_steps[ind++] = traversals;
+		triangle_intersects[ind++] = tri_intrs_count;
+		max_traversal_steps = max(max_traversal_steps, traversals);
+		max_triangle_intersects = max(max_triangle_intersects, tri_intrs_count);
 	}
 	float elapsed = t.elapsed() * 1000;
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
+
+	if (counter % CAMERA_FRAMES == 1) {
+		std::string filename;
+		filename += "intersection-count";
+		filename += to_string(camera_position);
+		filename += ".png";
+		stbi_write_png(filename.c_str(), SCRWIDTH, SCRHEIGHT, 3, intrs_data, (int)(sizeof(uint8_t) * SCRWIDTH * 3));
+	}
 }
 
 // EOF
