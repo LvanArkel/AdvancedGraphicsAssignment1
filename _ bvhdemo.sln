@@ -26,7 +26,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "B. beyond", "beyond.vcxproj
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bih", "bih.vcxproj", "{FDEACBE4-710A-4D54-AA0C-5AF6A28D51D0}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "bih", "assignment_1.vcxproj", "{839B017A-02D8-4F42-B339-EFC6800E9CD5}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "assignment_1", "assignment_1.vcxproj", "{839B017A-02D8-4F42-B339-EFC6800E9CD5}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "grid", "grid.vcxproj", "{F59B9380-C5E3-4389-ABA7-A59E65710645}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -86,6 +88,10 @@ Global
 		{839B017A-02D8-4F42-B339-EFC6800E9CD5}.Debug|x64.Build.0 = Debug|x64
 		{839B017A-02D8-4F42-B339-EFC6800E9CD5}.Release|x64.ActiveCfg = Release|x64
 		{839B017A-02D8-4F42-B339-EFC6800E9CD5}.Release|x64.Build.0 = Release|x64
+		{F59B9380-C5E3-4389-ABA7-A59E65710645}.Debug|x64.ActiveCfg = Debug|x64
+		{F59B9380-C5E3-4389-ABA7-A59E65710645}.Debug|x64.Build.0 = Debug|x64
+		{F59B9380-C5E3-4389-ABA7-A59E65710645}.Release|x64.ActiveCfg = Release|x64
+		{F59B9380-C5E3-4389-ABA7-A59E65710645}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
