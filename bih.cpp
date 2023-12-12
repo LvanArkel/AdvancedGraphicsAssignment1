@@ -422,11 +422,10 @@ void BihApp::Tick( float deltaTime )
 	Ray ray;
 	Timer t;
 	// render tiles of pixels
-	int WINDOWHEIGHT = SCRHEIGHT;
-	for (int y = 0; y < WINDOWHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
+	for (int y = 0; y < SCRHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
 	{
 		// calculate the position of a pixel on the screen in worldspace
-		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)WINDOWHEIGHT);
+		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)SCRHEIGHT);
 		// define the ray in worldspace
 		ray.O = cameraPositions[camera_position];
 		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
