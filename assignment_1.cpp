@@ -22,8 +22,8 @@ TheApp* CreateApp() { return new BihApp(); }
 //#define SCENE 0 //ROBOT
 #define SCENE 1 //LANDSCAPE
 
-//#define METHOD 0 // BVH
-#define METHOD 1 // Grid
+#define METHOD 0 // BVH
+//#define METHOD 1 // Grid
 //#define METHOD 2 // BIH
 
 #if METHOD == 0
@@ -67,6 +67,12 @@ __declspec(align(64)) struct Ray
 
 // Method-specific structs
 #if METHOD == 0
+struct BVHNode
+{
+	union { struct { float3 aabbMin; uint leftFirst; }; __m128 aabbMin4; };
+	union { struct { float3 aabbMax; uint triCount; }; __m128 aabbMax4; };
+	bool isLeaf() { return triCount > 0; }
+};
 #elif METHOD == 1
 #define FLOAT_MAX  3.402823466e+38
 #define FLOAT_MIN  1.175494351e-38
@@ -106,10 +112,11 @@ struct BihNode {
 Tri tri[N];
 
 #if METHOD == 0
+uint triIdx[N];
+BVHNode* bvhNode = 0;
+uint rootNodeIdx = 0, nodesUsed = 2;
 #elif METHOD == 1
 Grid grid;
-
-
 #elif METHOD == 2
 uint triIdx[N];
 BihNode bihNode[N * 2];
@@ -171,6 +178,161 @@ float IntersectAABB_SSE( const Ray& ray, const __m128& bmin4, const __m128& bmax
 
 // Method specific functions
 #if METHOD == 0
+// forward declarations
+void Subdivide(uint nodeIdx);
+void UpdateNodeBounds(uint nodeIdx);
+
+int IntersectBVH(Ray& ray)
+{
+	BVHNode* node = &bvhNode[rootNodeIdx], * stack[64];
+	uint stackPtr = 0;
+	int counter = 0;
+	while (1)
+	{
+		counter += 1;
+		if (node->isLeaf())
+		{
+			for (uint i = 0; i < node->triCount; i++)
+				IntersectTri(ray, tri[triIdx[node->leftFirst + i]]);
+			if (stackPtr == 0) break; else node = stack[--stackPtr];
+			continue;
+		}
+		BVHNode* child1 = &bvhNode[node->leftFirst];
+		BVHNode* child2 = &bvhNode[node->leftFirst + 1];
+#ifdef USE_SSE
+		float dist1 = IntersectAABB_SSE(ray, child1->aabbMin4, child1->aabbMax4);
+		float dist2 = IntersectAABB_SSE(ray, child2->aabbMin4, child2->aabbMax4);
+#else
+		float dist1 = IntersectAABB(ray, child1->aabbMin, child1->aabbMax);
+		float dist2 = IntersectAABB(ray, child2->aabbMin, child2->aabbMax);
+#endif
+		if (dist1 > dist2) { swap(dist1, dist2); swap(child1, child2); }
+		if (dist1 == 1e30f)
+		{
+			if (stackPtr == 0) break; else node = stack[--stackPtr];
+		}
+		else
+		{
+			node = child1;
+			if (dist2 != 1e30f) stack[stackPtr++] = child2;
+		}
+	}
+	return counter;
+}
+
+void BuildBVH()
+{
+	// create the BVH node pool
+	bvhNode = (BVHNode*)_aligned_malloc(sizeof(BVHNode) * N * 2, 64);
+	// populate triangle index array
+	for (int i = 0; i < N; i++) triIdx[i] = i;
+	// calculate triangle centroids for partitioning
+	for (int i = 0; i < N; i++)
+		tri[i].centroid = (tri[i].vertex0 + tri[i].vertex1 + tri[i].vertex2) * 0.3333f;
+	// assign all triangles to root node
+	BVHNode& root = bvhNode[rootNodeIdx];
+	root.leftFirst = 0, root.triCount = N;
+	UpdateNodeBounds(rootNodeIdx);
+	// subdivide recursively
+	Timer t;
+	Subdivide(rootNodeIdx);
+	printf("BVH (%i nodes) constructed in %.2fms.\n", nodesUsed, t.elapsed() * 1000);
+}
+
+void UpdateNodeBounds(uint nodeIdx)
+{
+	BVHNode& node = bvhNode[nodeIdx];
+	node.aabbMin = float3(1e30f);
+	node.aabbMax = float3(-1e30f);
+	for (uint first = node.leftFirst, i = 0; i < node.triCount; i++)
+	{
+		uint leafTriIdx = triIdx[first + i];
+		Tri& leafTri = tri[leafTriIdx];
+		node.aabbMin = fminf(node.aabbMin, leafTri.vertex0);
+		node.aabbMin = fminf(node.aabbMin, leafTri.vertex1);
+		node.aabbMin = fminf(node.aabbMin, leafTri.vertex2);
+		node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex0);
+		node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex1);
+		node.aabbMax = fmaxf(node.aabbMax, leafTri.vertex2);
+	}
+}
+
+float EvaluateSAH(BVHNode& node, int axis, float pos)
+{
+	// determine triangle counts and bounds for this split candidate
+	aabb leftBox, rightBox;
+	int leftCount = 0, rightCount = 0;
+	for (uint i = 0; i < node.triCount; i++)
+	{
+		Tri& triangle = tri[triIdx[node.leftFirst + i]];
+		if (triangle.centroid[axis] < pos)
+		{
+			leftCount++;
+			leftBox.grow(triangle.vertex0);
+			leftBox.grow(triangle.vertex1);
+			leftBox.grow(triangle.vertex2);
+		}
+		else
+		{
+			rightCount++;
+			rightBox.grow(triangle.vertex0);
+			rightBox.grow(triangle.vertex1);
+			rightBox.grow(triangle.vertex2);
+		}
+	}
+	float cost = leftCount * leftBox.area() + rightCount * rightBox.area();
+	return cost > 0 ? cost : 1e30f;
+}
+
+void Subdivide(uint nodeIdx)
+{
+	// terminate recursion
+	BVHNode& node = bvhNode[nodeIdx];
+	// determine split axis using SAH
+	int bestAxis = -1;
+	float bestPos = 0, bestCost = 1e30f;
+	for (int axis = 0; axis < 3; axis++) for (uint i = 0; i < node.triCount; i++)
+	{
+		Tri& triangle = tri[triIdx[node.leftFirst + i]];
+		float candidatePos = triangle.centroid[axis];
+		float cost = EvaluateSAH(node, axis, candidatePos);
+		if (cost < bestCost)
+			bestPos = candidatePos, bestAxis = axis, bestCost = cost;
+	}
+	int axis = bestAxis;
+	float splitPos = bestPos;
+	float3 e = node.aabbMax - node.aabbMin; // extent of parent
+	float parentArea = e.x * e.y + e.y * e.z + e.z * e.x;
+	float parentCost = node.triCount * parentArea;
+	if (bestCost >= parentCost) return;
+	// in-place partition
+	int i = node.leftFirst;
+	int j = i + node.triCount - 1;
+	while (i <= j)
+	{
+		if (tri[triIdx[i]].centroid[axis] < splitPos)
+			i++;
+		else
+			swap(triIdx[i], triIdx[j--]);
+	}
+	// abort split if one of the sides is empty
+	int leftCount = i - node.leftFirst;
+	if (leftCount == 0 || leftCount == node.triCount) return;
+	// create child nodes
+	int leftChildIdx = nodesUsed++;
+	int rightChildIdx = nodesUsed++;
+	bvhNode[leftChildIdx].leftFirst = node.leftFirst;
+	bvhNode[leftChildIdx].triCount = leftCount;
+	bvhNode[rightChildIdx].leftFirst = i;
+	bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
+	node.leftFirst = leftChildIdx;
+	node.triCount = 0;
+	UpdateNodeBounds(leftChildIdx);
+	UpdateNodeBounds(rightChildIdx);
+	// recurse
+	Subdivide(leftChildIdx);
+	Subdivide(rightChildIdx);
+}
 #elif METHOD == 1
 bool CheckGridCell(int x, int y, int z, Ray& ray, vector<IntersectionData>& intersected_triangles) {
 	//if(camera_position == 3) cout << x << "," << y << "," << z << endl;
@@ -682,7 +844,7 @@ void BihApp::Init()
 #endif
 	}
 #endif
-	
+	BuildBVH();
 #if METHOD == 0
 #elif METHOD == 1
 	BuildGrid();
@@ -801,6 +963,7 @@ void BihApp::Tick( float deltaTime )
 		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
 		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
 #if METHOD == 0
+		int traversals = IntersectBVH(ray);
 #elif METHOD == 1
 		int traversals = IntersectGrid(ray);
 #elif METHOD == 2
