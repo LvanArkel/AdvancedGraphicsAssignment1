@@ -283,17 +283,25 @@ void IntersectGrid(Ray& ray) {
 	//float tDeltaY = dy / abs(ray.D.y);
 	//float tDeltaZ = dz / abs(ray.D.z);
 
-	int cellIndex[] = { 0, 0, 0 };
+	//int cellIndex[] = { 0, 0, 0 };
 	int x0 = floor((intersectionpoint.x - grid.min.x) / grid.cellSize.x);
-	cellIndex[0] = clamp(cellIndex[0], 0, GRID_SIZE - 1);
+	//std::cout << x0 << std::endl;
+
+	x0 = clamp(x0, 0, GRID_SIZE - 1);
+	//std::cout << x0 << std::endl;
+
+	//cellIndex[0] = clamp(cellIndex[0], 0, GRID_SIZE - 1);
 	int y0 = floor((intersectionpoint.y - grid.min.y) / grid.cellSize.y);
-	cellIndex[1] = clamp(cellIndex[1], 0, GRID_SIZE - 1);
+	y0 = clamp(y0, 0, GRID_SIZE - 1);
+	//cellIndex[1] = clamp(cellIndex[1], 0, GRID_SIZE - 1);
 	int z0 = floor((intersectionpoint.z - grid.min.z) / grid.cellSize.z);
-	cellIndex[2] = clamp(cellIndex[2], 0, GRID_SIZE - 1);
+	z0 = clamp(z0, 0, GRID_SIZE - 1);
+	//cellIndex[2] = clamp(cellIndex[2], 0, GRID_SIZE - 1);
 
 	vector<IntersectionData> intersected_triangles;
 	float t;
 	while (1) {
+		//std::cout << x0 << ", " << y0 << ", " << z0 << std::endl;
 		tri_intrs_count++;
 		t = min({ tMaxX, tMaxY, tMaxZ });
 		if (CheckGridCell(x0, y0, z0, ray, intersected_triangles)) {
