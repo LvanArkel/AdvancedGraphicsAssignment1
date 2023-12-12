@@ -17,7 +17,7 @@ TheApp* CreateApp() { return new BihApp(); }
 #define USE_SSE
 
 // triangle count
-#define N	50//12582 // hardcoded for the unity vehicle mesh
+#define N	12582 // hardcoded for the unity vehicle mesh
 
 // forward declarations
 void Subdivide( uint nodeIdx );
@@ -178,7 +178,6 @@ void Subdivide(int nodeId, aabb boundary, int count) {
 	node.leftIdx = leftChildIdx;
 	node.clip[0] = leftThresh;
 	node.clip[1] = rightThresh;
-	node.triangle = 0;
 	aabb leftBoundary = boundary;
 	leftBoundary.bmax[longestAxis] = leftThresh;
 	aabb rightBoundary = boundary;
@@ -318,7 +317,7 @@ void IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 
 void BihApp::Init()
 {
-	/*FILE* file = fopen( "assets/unity.tri", "r" );
+	FILE* file = fopen( "assets/unity.tri", "r" );
 	float a, b, c, d, e, f, g, h, i;
 	for (int t = 0; t < N; t++)
 	{
@@ -328,16 +327,16 @@ void BihApp::Init()
 		tri[t].vertex1 = float3( d, e, f );
 		tri[t].vertex2 = float3( g, h, i );
 	}
-	fclose( file );*/
+	fclose( file );
 	// intialize a scene with N random triangles
-	for (int i = 0; i < N; i++)
+	/*for (int i = 0; i < N; i++)
 	{
 		float3 r0 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		float3 r1 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		float3 r2 = float3(RandomFloat(), RandomFloat(), RandomFloat());
 		tri[i].vertex0 = r0 * 9 - float3(5);
 		tri[i].vertex1 = tri[i].vertex0 + r1, tri[i].vertex2 = tri[i].vertex0 + r2;
-	}
+	}*/
 	/*tri[0] = Tri{ 
 		float3(17.0, 29.0, 0.0),
 		float3(93.0, 47.0, 0.0),
@@ -370,40 +369,56 @@ void BihApp::Init()
 	};*/
 	// construct the BVH
 	BuildBih();
-	std::cout << DumpBih(0) << "\n";
+	//std::cout << DumpBih(0) << "\n";
 }
 
-const int POSITIONS = 2;
-float3 cameraPositions[2*POSITIONS] = {
-	float3(-1.5f, -0.2f, -0.25f),
-	//float3(-1.5f, -0.2f, -0.25f),
-	float3(-1.5f, -0.2f, 0.25f),
-	//float3(-1.5f, -0.2f, -0.25f),
+const int POSITIONS = 4;
+const int CAMERA_FRAMES = 20;
+int camera_position = 0;
+int counter = 0;
+
+float3 cameraPositions[POSITIONS] = {
+	float3(-1.5f, -0.2f, -3.5f),
+
+	float3(-4.5f, -0.2f, 0.0f),
+
+	float3(-1.5f, -0.2f, 3.5f),
+
+	float3(1.5f, -0.2f, 0.0f),
 };
-float3 cameraPoints[3*POSITIONS] = {
-	float3(-2.5f, 0.8f, -0.5f),
-	float3(-0.5f, 0.8f, -0.5f),
-	float3(-2.5f, -1.2f, -0.5f),
-	//float3(-2.5f, 0.8f, -0.5f),
-	//float3(-0.5f, 0.8f, -0.5f),
-	//float3(-2.5f, -1.2f, -0.5f),
-	float3(-2.5f, 0.8f, 0.5f),
-	float3(-0.5f, 0.8f, 0.5f),
-	float3(-2.5f, -1.2f, 0.5f),
-	//float3(-2.5f, 0.8f, -0.5f),
-	//float3(-0.5f, 0.8f, -0.5f),
-	//float3(-2.5f, -1.2f, -0.5f),
+
+float3  cameraPoints[3 * POSITIONS] = {
+	float3(-2.5f, 0.8f, -1.5f),
+	float3(-0.5f, 0.8f, -1.5f),
+	float3(-2.5f, -1.2f, -1.5f),
+
+	float3(-2.5f, 0.8f, 1.0f),
+	float3(-2.5f, 0.8f, -1.0f),
+	float3(-2.5f, -1.2f, 1.0f),
+
+	float3(-0.5f, 0.8f, 1.5f),
+	float3(-2.5f, 0.8f, 1.5f),
+	float3(-0.5f, -1.2f, 1.5f),
+
+	float3(-0.5f, 0.8f, -1.0f),
+	float3(-0.5f, 0.8f, 1.0f),
+	float3(-0.5f, -1.2f, -1.0f),
 };
+
 
 void BihApp::Tick( float deltaTime )
 {
+	if (counter % CAMERA_FRAMES == 0) {
+		camera_position = (camera_position + 1) % POSITIONS;
+	}
+	//camera_position = 1;
+	counter += 1;
 	// draw the scene
-	screen->Clear( 0 );
+	screen->Clear(0);
 	// define the corners of the screen in worldspace
-	/*float3 p0( -2.5f, 0.8f, -0.5f ), p1( -0.5f, 0.8f, -0.5f ), p2( -2.5f, -1.2f, -0.5f );
-	float3 camera = float3(-1.5f, -0.2f, 2.5f);*/
-	float3 p0(-1, 1, -15), p1(1, 1, -15), p2(-1, -1, -15);
-	float3 camera = float3(0, 0, -18);
+	float3 p0 = cameraPoints[3 * camera_position];
+	float3 p1 = cameraPoints[3 * camera_position + 1];
+	float3 p2 = cameraPoints[3 * camera_position + 2];
 	Ray ray;
 	Timer t;
 	// render tiles of pixels
@@ -417,33 +432,38 @@ void BihApp::Tick( float deltaTime )
 		// calculate the position of a pixel on the screen in worldspace
 		float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)WINDOWHEIGHT);
 		// define the ray in worldspace
-		ray.O = camera;
+		ray.O = cameraPositions[camera_position];
 		ray.D = normalize(pixelPos - ray.O), ray.t = 1e30f;
 		ray.rD = float3(1 / ray.D.x, 1 / ray.D.y, 1 / ray.D.z);
+		ray.t = 1e30f;
+		bool bihHit = false;
 		IntersectBih(ray, totalBoundary, 0);
-		//for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
-		if (ray.t < 1e30f) screen->Plot(x, y, 0xffffff);
+		uint c = 500 - (int)(ray.t * 42);
+		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);
+#ifdef DOUBLERENDER
+		ray.t = 1e30f;
+		int closest_tri = -1;
+		float closest_intersect = ray.t;
+		for (int i = 0; i < N; i++) {
+			IntersectTri(ray, tri[i]);
+			if (ray.t < closest_intersect) {
+				closest_tri = i;
+				closest_intersect = ray.t;
+			}
+		}
+		if (ray.t < 1e30f) { 
+			screen->Plot(x, y + WINDOWHEIGHT, 0xffffff);
+			if (!bihHit) {
+				ray.t = 1e30f;
+				printf("Ray did not hit Tri %d", closest_tri);
+				IntersectBih(ray, totalBoundary, 0);
+			}
+		}
+#endif
+
 		/*uint c = 500 - (int)(ray.t * 42);
 		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);*/
 	}
-#ifdef DOUBLERENDER
-	for (int x = 0; x < SCRWIDTH; x++) {
-		screen->Plot(x, WINDOWHEIGHT, 0xffffff);
-	}
-	for (int y = 0; y < WINDOWHEIGHT; y++) {
-		for (int x = 0; x < SCRWIDTH; x++) {
-			// calculate the position of a pixel on the screen in worldspace
-			float3 pixelPos = p0 + (p1 - p0) * (x / (float)SCRWIDTH) + (p2 - p0) * (y / (float)WINDOWHEIGHT);
-			// define the ray in worldspace
-			ray.O = camera;
-			ray.D = normalize(pixelPos - ray.O);
-			// initially the ray has an 'infinite length'
-			ray.t = 1e30f;
-			for (int i = 0; i < N; i++) IntersectTri(ray, tri[i]);
-			if (ray.t < 1e30f) screen->Plot(x, y+WINDOWHEIGHT, 0xffffff);
-		}
-	}
-#endif
 	float elapsed = t.elapsed() * 1000;
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
 }

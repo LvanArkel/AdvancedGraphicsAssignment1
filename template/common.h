@@ -1,9 +1,14 @@
 // common.h is to be included in host and device code and stores
 // global settings and defines.
+//#define DOUBLERENDER
 
 // default screen resolution
 #define SCRWIDTH	1024
-#define SCRHEIGHT	512
+#ifdef DOUBLERENDER
+#define SCRHEIGHT	1024
+#else
+#define SCRHEIGHT 512
+#endif
 // #define FULLSCREEN
 
 // constants
