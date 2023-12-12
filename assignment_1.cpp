@@ -19,8 +19,8 @@ TheApp* CreateApp() { return new BihApp(); }
 // enable the use of SSE in the AABB intersection function
 #define USE_SSE
 
-#define SCENE 0 //ROBOT
-//#define SCENE 1 //LANDSCAPE
+//#define SCENE 0 //ROBOT
+#define SCENE 1 //LANDSCAPE
 
 //#define METHOD 0 // BVH
 #define METHOD 1 // Grid
@@ -705,7 +705,7 @@ void BihApp::Init()
 	filename += METHOD_NAME;
 	filename += "_rays.csv";
 	rayfile.open(filename.c_str());
-	rayfile << "camera position, ray_i, traversal steps, triangle intersections";
+	rayfile << "camera position,ray_i,traversal steps,triangle intersections";
 #endif
 }
 
@@ -814,7 +814,7 @@ void BihApp::Tick( float deltaTime )
 		max_triangle_intersects = max(max_triangle_intersects, tri_intrs_count);
 
 #ifdef RECORD_RAYS
-		rayfile << camera_position << ", " << ind << ", " << traversals << ", " << tri_intrs_count << "\n";
+		rayfile << camera_position << "," << ind << "," << traversals << "," << tri_intrs_count << "\n";
 #endif
 		ind += 1;
 	}
