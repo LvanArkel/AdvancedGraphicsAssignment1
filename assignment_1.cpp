@@ -1,6 +1,7 @@
 #include "precomp.h"
-#include "bih.h"
+#include "assignment_1.h"
 #include "stb_image_write.h"
+#include "OBJ_Loader.h"
 #include <format>
 #include <string>
 
@@ -29,8 +30,9 @@ TheApp* CreateApp() { return new BihApp(); }
 	#define N 12582
 	#define OBJ_NAME "ROBOT"
 #elif SCENE == 1
-	#define N 32768
+	#define N 98304/3
 	#define OBJ_NAME "LANDSCAPE"
+	#define OBJ_PATH "procedural ground.obj"
 #endif
 
 // minimal structs
@@ -366,12 +368,29 @@ void BihApp::Init()
 	}
 	fclose(file);
 #elif SCENE == 1
+	objl::Loader loader;
+	loader.LoadFile(OBJ_PATH);
+	vector<objl::Vertex> vertices = loader.LoadedMeshes[0].Vertices;
+	vector<uint> indices = loader.LoadedMeshes[0].Indices;
+
+	//printf("Size vertices: %d, Size indices: %d\n", vertices.size(), indices.size());
+	// aabb (-32.857990, -11.336102, -32.637764 : 32.926079, 10.171690, 32.333691)
+	//Size vertices: 65536, Size indices: 98304
+
+	for (int i = 0, triidx = 0; i < N * 3; i += 3, triidx++)
+	{
+		//cout << vertices[i].Position.X << ", " << vertices[i].Position.Y << ", " << vertices[i].Position.Z << endl;
+		tri[triidx].vertex0 = float3(vertices[indices[i]].Position.X, vertices[indices[i]].Position.Y, vertices[indices[i]].Position.Z);
+		tri[triidx].vertex1 = float3(vertices[indices[i + 1]].Position.X, vertices[indices[i + 1]].Position.Y, vertices[indices[i + 1]].Position.Z);
+		tri[triidx].vertex2 = float3(vertices[indices[i + 2]].Position.X, vertices[indices[i + 2]].Position.Y, vertices[indices[i + 2]].Position.Z);
+	}
 #endif
 	
 #if METHOD == 0
 #elif METHOD == 1
 #elif METHOD == 2
 	BuildBih();
+	printf("aabb (%f, %f, %f : %f, %f, %f)\n", totalBoundary.bmin[0], totalBoundary.bmin[1], totalBoundary.bmin[2], totalBoundary.bmax[0], totalBoundary.bmax[1], totalBoundary.bmax[2]);
 	//std::cout << DumpBih(0) << "\n";
 #endif
 }
@@ -410,6 +429,33 @@ float3  cameraPoints[3 * POSITIONS] = {
 	float3(-0.5f, -1.2f, -1.0f),
 };
 #elif SCENE == 1
+float3 cameraPositions[POSITIONS] = {
+	float3(0.f, 2.f, -2.f),
+
+	float3(-2.f, 2.f, 0.f),
+
+	float3(0.f, 2.f, 2.f),
+
+	float3(2.f, 2.f, 0.f),
+};
+
+float3  cameraPoints[3 * POSITIONS] = {
+	cameraPositions[0] + float3(-2.f, 0.f, sqrt(2.0f)),
+	cameraPositions[0] + float3(2.f, 0.f, sqrt(2.0f)),
+	cameraPositions[0] + float3(-2.f, -sqrt(2.f), 0.f),
+
+	cameraPositions[1] + float3(sqrt(2.0f), 0.f, 2.f),
+	cameraPositions[1] + float3(sqrt(2.0f), 0.f, -2.f),
+	cameraPositions[1] + float3(0.f, -sqrt(2.f), 2.f),
+
+	cameraPositions[2] + float3(2.f, 0.f, -sqrt(2.0f)),
+	cameraPositions[2] + float3(-2.f, 0.f, -sqrt(2.0f)),
+	cameraPositions[2] + float3(2.f, -sqrt(2.f), 0.f),
+
+	cameraPositions[3] + float3(-sqrt(2.0f), 0.f, -2.f),
+	cameraPositions[3] + float3(-sqrt(2.0f), 0.f, 2.f),
+	cameraPositions[3] + float3(0.f, -sqrt(2.f), -2.f),
+};
 #endif
 
 
@@ -419,10 +465,7 @@ void BihApp::Tick( float deltaTime )
 	min_triangle_intersections = MAXINT;
 	max_traversal_steps = 0;
 	max_triangle_intersects = 0;
-	if (counter % CAMERA_FRAMES == 0) {
-		camera_position = (camera_position + 1) % POSITIONS;
-	}
-	//camera_position = 1;
+	//camera_position = 3;
 	counter += 1;
 	// draw the scene
 	screen->Clear(0);
@@ -464,7 +507,12 @@ void BihApp::Tick( float deltaTime )
 	float elapsed = t.elapsed() * 1000;
 	printf( "tracing time: %.2fms (%5.2fK rays/s)\n", elapsed, sqr( 630 ) / elapsed );
 
-	/*if (counter % CAMERA_FRAMES == 1) {
+
+	if (counter % CAMERA_FRAMES == 0) {
+		camera_position = (camera_position + 1) % POSITIONS;
+	}
+
+	/*if (counter % CAMERA_FRAMES == 0) {
 		std::string filename;
 		filename += "intersection-count";
 		filename += to_string(camera_position);
