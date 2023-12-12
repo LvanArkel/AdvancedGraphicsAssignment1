@@ -422,11 +422,7 @@ void BihApp::Tick( float deltaTime )
 	Ray ray;
 	Timer t;
 	// render tiles of pixels
-#ifdef DOUBLERENDER
-	int WINDOWHEIGHT = SCRHEIGHT / 2;
-#else
 	int WINDOWHEIGHT = SCRHEIGHT;
-#endif
 	for (int y = 0; y < WINDOWHEIGHT; y++) for (int x = 0; x < SCRWIDTH; x++)
 	{
 		// calculate the position of a pixel on the screen in worldspace
@@ -440,26 +436,6 @@ void BihApp::Tick( float deltaTime )
 		IntersectBih(ray, totalBoundary, 0);
 		uint c = 500 - (int)(ray.t * 42);
 		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);
-#ifdef DOUBLERENDER
-		ray.t = 1e30f;
-		int closest_tri = -1;
-		float closest_intersect = ray.t;
-		for (int i = 0; i < N; i++) {
-			IntersectTri(ray, tri[i]);
-			if (ray.t < closest_intersect) {
-				closest_tri = i;
-				closest_intersect = ray.t;
-			}
-		}
-		if (ray.t < 1e30f) { 
-			screen->Plot(x, y + WINDOWHEIGHT, 0xffffff);
-			if (!bihHit) {
-				ray.t = 1e30f;
-				printf("Ray did not hit Tri %d", closest_tri);
-				IntersectBih(ray, totalBoundary, 0);
-			}
-		}
-#endif
 
 		/*uint c = 500 - (int)(ray.t * 42);
 		if (ray.t < 1e30f) screen->Plot(x, y, c * 0x10101);*/
