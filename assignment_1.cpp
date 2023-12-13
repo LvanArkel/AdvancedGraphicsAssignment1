@@ -19,8 +19,9 @@ TheApp* CreateApp() { return new BihApp(); }
 // enable the use of SSE in the AABB intersection function
 #define USE_SSE
 
-#define SCENE 0 //ROBOT
+//#define SCENE 0 //ROBOT
 //#define SCENE 1 //LANDSCAPE
+#define SCENE 2 //TEAPOT
 
 #define METHOD 0 // BVH
 //#define METHOD 1 // Grid
@@ -41,6 +42,10 @@ TheApp* CreateApp() { return new BihApp(); }
 	#define N 98304/3
 	#define OBJ_NAME "LANDSCAPE"
 	#define OBJ_PATH "procedural ground.obj"
+#elif SCENE == 2
+	#define N 89412/3
+	#define OBJ_NAME "TEAPOT"
+	#define OBJ_PATH "teapotstadium.obj"
 #endif
 
 // minimal structs
@@ -580,37 +585,44 @@ void Subdivide(int nodeId, aabb boundary, int count) {
 		node.type = 3;
 		return;
 	}
-	int longestAxis = 0;
-	float longestSide = 0.0;
-	for (int a = 0; a < 3; a++) {
-		float length = boundary.bmax[a] - boundary.bmin[a];
-		if (length > longestSide) {
-			longestAxis = a;
-			longestSide = length;
+
+	int longestAxis;
+	int i;
+	int leftCount;
+
+	bool findingSplit = true;
+	while (findingSplit) {
+		longestAxis = 0;
+		float longestSide = 0.0;
+		for (int a = 0; a < 3; a++) {
+			float length = boundary.bmax[a] - boundary.bmin[a];
+			if (length > longestSide) {
+				longestAxis = a;
+				longestSide = length;
+			}
 		}
-	}
-	float splitPlane = boundary.bmin[longestAxis] + (boundary.bmax[longestAxis] - boundary.bmin[longestAxis]) * 0.5;
-	int i = node.triangle;
-	int j = i + count - 1;
-	// TODO: Fix object sorting
-	while (i <= j) {
-		if (tri[triIdx[i]].centroid[longestAxis] < splitPlane)
-			i++;
-		else
-			swap(triIdx[i], triIdx[j--]);
-	}
-	int leftCount = i - node.triangle;
-	if (leftCount == 0) {
-		// All nodes are in right child
-		boundary.bmin[longestAxis] = splitPlane;
-		Subdivide(nodeId, boundary, count);
-		return;
-	}
-	else if (leftCount == count) {
-		// All nodes are in left child
-		boundary.bmax[longestAxis] = splitPlane;
-		Subdivide(nodeId, boundary, count);
-		return;
+		float splitPlane = boundary.bmin[longestAxis] + (boundary.bmax[longestAxis] - boundary.bmin[longestAxis]) * 0.5;
+		i = node.triangle;
+		int j = i + count - 1;
+		// TODO: Fix object sorting
+		while (i <= j) {
+			if (tri[triIdx[i]].centroid[longestAxis] < splitPlane)
+				i++;
+			else
+				swap(triIdx[i], triIdx[j--]);
+		}
+		leftCount = i - node.triangle;
+		if (leftCount == 0) {
+			// All nodes are in right child
+			boundary.bmin[longestAxis] = splitPlane;
+		}
+		else if (leftCount == count) {
+			// All nodes are in left child
+			boundary.bmax[longestAxis] = splitPlane;
+		}
+		else {
+			findingSplit = false;
+		}
 	}
 	// TODO: Squeeze boundary (probably just do a max from boundary.bmin[a]
 	float leftThresh = boundary.bmin[longestAxis];
@@ -791,7 +803,7 @@ int IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 #endif
 
 //#define RECORD_TIME
-#define RECORD_RAYS
+//#define RECORD_RAYS
 
 #ifdef RECORD_TIME
 const int CAMERA_FRAMES = 10;
@@ -799,6 +811,9 @@ float times[CAMERA_FRAMES];
 #endif
 #ifdef RECORD_RAYS
 const int CAMERA_FRAMES = 1;
+#endif
+#if !defined(RECORD_TIME) && !defined(RECORD_RAYS)
+const int CAMERA_FRAMES = 20;
 #endif
 
 int camera_position = 0;
@@ -823,15 +838,20 @@ void BihApp::Init()
 
 	}
 	fclose(file);
-#elif SCENE == 1
+#elif SCENE == 1 || SCENE == 2
 	objl::Loader loader;
 	loader.LoadFile(OBJ_PATH);
-	vector<objl::Vertex> vertices = loader.LoadedMeshes[0].Vertices;
-	vector<uint> indices = loader.LoadedMeshes[0].Indices;
+	vector<objl::Vertex> vertices = loader.LoadedVertices;
+	vector<uint> indices = loader.LoadedIndices;
+	printf("Size vertices: %d, Size indices: %d\n", vertices.size(), indices.size());
 
+	// Landscape
 	//printf("Size vertices: %d, Size indices: %d\n", vertices.size(), indices.size());
 	// aabb (-32.857990, -11.336102, -32.637764 : 32.926079, 10.171690, 32.333691)
 	//Size vertices: 65536, Size indices: 98304
+
+	// Temple
+	// aabb (-1.793186, -0.000000, -2.487420 : 1.793186, 3.313948, 2.487421)
 
 	for (int i = 0, triidx = 0; i < N * 3; i += 3, triidx++)
 	{
@@ -841,8 +861,8 @@ void BihApp::Init()
 		tri[triidx].vertex2 = float3(vertices[indices[i + 2]].Position.X, vertices[indices[i + 2]].Position.Y, vertices[indices[i + 2]].Position.Z);
 	}
 #endif
-	BuildBVH();
 #if METHOD == 0
+	BuildBVH();
 #elif METHOD == 1
 	BuildGrid();
 #elif METHOD == 2
@@ -927,6 +947,34 @@ float3  cameraPoints[3 * POSITIONS] = {
 	cameraPositions[3] + float3(-sqrt(2.0f), 0.f, -2.f),
 	cameraPositions[3] + float3(-sqrt(2.0f), 0.f, 2.f),
 	cameraPositions[3] + float3(0.f, -sqrt(2.f), -2.f),
+};
+#elif SCENE == 2
+float3 cameraPositions[POSITIONS] = {
+	float3(0.f, 2.f, -5.f),
+
+	float3(-4.f, 2.f, 0.f),
+
+	float3(0.f, 1.f, -1.f),
+
+	float3(0.f, 3.0f, -3.5f),
+};
+
+float3  cameraPoints[3 * POSITIONS] = {
+	cameraPositions[0] + float3(-2.5f, 2.f, 2.f),
+	cameraPositions[0] + float3(2.5f, 2.f, 2.f),
+	cameraPositions[0] + float3(-2.5f, -2.f, 2.f),
+
+	cameraPositions[1] + float3(2.f, 2.f, 2.5f),
+	cameraPositions[1] + float3(2.f, 2.f, -2.5f),
+	cameraPositions[1] + float3(2.f, -2.f, 2.5f),
+
+	cameraPositions[2] + float3(-2.5f, 2.f, 2.f),
+	cameraPositions[2] + float3(2.5f, 2.f, 2.f),
+	cameraPositions[2] + float3(-2.5f, -2.f, 2.f),
+
+	cameraPositions[3] + float3(-2.5f, 0.f, sqrt(2.0f)),
+	cameraPositions[3] + float3(2.5f, 0.f, sqrt(2.0f)),
+	cameraPositions[3] + float3(-2.5f, -sqrt(2.f), 0.f),
 };
 #endif
 
