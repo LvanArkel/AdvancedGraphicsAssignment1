@@ -152,12 +152,12 @@ bool FindRayGridIntersections(Ray& ray, float3& intersectionpoint, float3& exitp
 
 	float3 neart, fart;
 
-	// Check for parallel rays
-	if (ray.D.x == 0) if (ray.O.x < grid.min.x || ray.O.x > grid.max.x) return false; // No intersection
-	if (ray.D.y == 0) if (ray.O.y < grid.min.y || ray.O.y > grid.max.y) return false; // No intersection
-	if (ray.D.z == 0) if (ray.O.z < grid.min.z || ray.O.z > grid.max.z) return false; // No intersection
+	// Check for parallel rays that will pass the grid
+	if (ray.D.x == 0) if (ray.O.x < grid.min.x || ray.O.x > grid.max.x) return false; 
+	if (ray.D.y == 0) if (ray.O.y < grid.min.y || ray.O.y > grid.max.y) return false; 
+	if (ray.D.z == 0) if (ray.O.z < grid.min.z || ray.O.z > grid.max.z) return false;
 
-	// Calculate t at intersection for each axis
+	// compute t at  both (enter and exit) intersection points for each axis
 	neart.x = (grid.min.x - ray.O.x) / ray.D.x;
 	fart.x = (grid.max.x - ray.O.x) / ray.D.x;
 	neart.y = (grid.min.y - ray.O.y) / ray.D.y;
@@ -165,13 +165,13 @@ bool FindRayGridIntersections(Ray& ray, float3& intersectionpoint, float3& exitp
 	neart.z = (grid.min.z - ray.O.z) / ray.D.z;
 	fart.z = (grid.max.z - ray.O.z) / ray.D.z;
 
-	// pick the closest and the furthest
+	// find which one is the entrance point and which is the exit point
 	tNear = max({ min(neart.x, fart.x), min(neart.y, fart.y), min(neart.z, fart.z) });
 	tFar = min({ max(neart.x, fart.x), max(neart.y, fart.y), max(neart.z, fart.z) });
 
 	// Check if there is any valid intersection
 	if (tNear > tFar || tFar < 0) {
-		return false; // No intersection
+		return false; 
 	}
 
 	// Calculate both intersection points
