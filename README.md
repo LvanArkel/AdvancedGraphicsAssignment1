@@ -1,9 +1,12 @@
 # Assignment 1
 The code can all be found in project Assignment 1.
+
 The acceleration structure can be changed by defining one of the METHOD macros.
 Only one acceleration structure should be active at any given time.
+
 The 3D model can be changed by defining one of the SCENE macros.
 Only one scene should be active at any given time.
+
 
 To record execution time for each camera angle, define RECORD_TIME.
 To record heatmaps for each camera angle, define RECORD_RAYS.
