@@ -23,9 +23,9 @@ TheApp* CreateApp() { return new BihApp(); }
 //#define SCENE 1 //LANDSCAPE
 #define SCENE 2 //TEAPOT
 
-#define METHOD 0 // BVH
+//#define METHOD 0 // BVH
 //#define METHOD 1 // Grid
-//#define METHOD 2 // BIH
+#define METHOD 2 // BIH
 
 #if METHOD == 0
 	#define METHOD_NAME "BVH"
@@ -746,7 +746,11 @@ int IntersectBih(Ray& ray, aabb rootBoundary, int nodeIdx) {
 			Tri triangle = tri[triIdx[node.triangle]];
 			IntersectTri(ray, triangle);
 			if (ray.t < 1e30f) {
+#if 0
 				return counter;
+#else
+				continue;
+#endif
 			}
 			else {
 				continue;
